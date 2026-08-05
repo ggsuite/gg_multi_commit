@@ -17,9 +17,6 @@ import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
 
-/// Typedef for editing the commit message interactively.
-typedef EditMessage = Future<String?> Function(String initialMessage);
-
 /// Command to commit changes across all repositories in the current ticket.
 class DoCommitCommand extends DirCommand<void> {
   /// Constructor

@@ -22,31 +22,6 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
 
-/// Typedef for running processes (for injection & tests).
-typedef ProcessRunner =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-      Map<String, String>? environment,
-    });
-
-/// Default process runner that uses the system's `Process.run`
-// coverage:ignore-start
-Future<ProcessResult> _defaultProcessRunner(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-  Map<String, String>? environment,
-}) => Process.run(
-  executable,
-  arguments,
-  workingDirectory: workingDirectory,
-  environment: environment,
-  runInShell: true,
-);
-// coverage:ignore-end
-
 /// Thrown when merging the main branch into a feature branch ends in
 /// conflicts.
 ///
@@ -110,7 +85,7 @@ class DoPushCommand extends DirCommand<void> {
        _canCommit = canCommit ?? CanCommitCommand(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
-       _processRunner = processRunner ?? _defaultProcessRunner,
+       _processRunner = processRunner ?? defaultProcessRunner,
        _mainBranch = mainBranch ?? gg_publish.MainBranch(ggLog: ggLog) {
     _addArgs();
   }
