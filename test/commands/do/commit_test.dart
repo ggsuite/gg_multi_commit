@@ -13,6 +13,7 @@ import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
+import 'package:gg_multi_core/gg_multi_core.dart';
 
 class MockGgCanCommit extends Mock implements gg.CanCommit {}
 

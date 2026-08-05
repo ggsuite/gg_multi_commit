@@ -8,7 +8,7 @@ library;
 
 export 'src/commands/can/commit.dart';
 export 'src/commands/can/push.dart';
-export 'src/commands/can/review.dart' hide ProcessRunner;
+export 'src/commands/can/review.dart';
 export 'src/commands/did/commit.dart';
 export 'src/commands/did/push.dart';
 export 'src/commands/did/review.dart';

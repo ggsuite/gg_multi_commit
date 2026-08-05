@@ -1,3 +1,0 @@
-dependency_overrides:
-  gg_multi_core:
-    path: ../gg_multi_core

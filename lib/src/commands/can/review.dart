@@ -17,28 +17,6 @@ import 'package:path/path.dart' as path;
 
 import 'package:gg_multi_core/gg_multi_core.dart';
 
-/// Typedef for running processes (for injection & tests).
-typedef ProcessRunner =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      String? workingDirectory,
-    });
-
-/// Default process runner that uses the system's `Process.run`
-// coverage:ignore-start
-Future<ProcessResult> _defaultProcessRunner(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-}) => Process.run(
-  executable,
-  arguments,
-  workingDirectory: workingDirectory,
-  runInShell: true,
-);
-// coverage:ignore-end
-
 /// Command to check if all repos in the ticket can be reviewed.
 class CanReviewCommand extends DirCommand<void> {
   /// Constructor
@@ -53,7 +31,7 @@ class CanReviewCommand extends DirCommand<void> {
     TicketState? ticketState,
   }) : _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
-       _processRunner = processRunner ?? _defaultProcessRunner,
+       _processRunner = processRunner ?? defaultProcessRunner,
        _ggIsFeatureBranch =
            ggIsFeatureBranch ?? gg_publish.IsFeatureBranch(ggLog: ggLog),
        _ggPubGetOffline = ggPubGetOffline ?? gg.PubGetOffline(ggLog: ggLog),
