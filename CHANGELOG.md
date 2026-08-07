@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Fix issue with azure URLs
+
 ## 1.0.1 - 2026-08-05
 
 ### Changed

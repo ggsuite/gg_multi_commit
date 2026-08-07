@@ -205,7 +205,7 @@ class DoReviewCommand extends DirCommand<void> {
             urls[repoName] = _changesUrl(url);
           }
         } catch (e) {
-          failures[repoName] = e.toString();
+          failures[repoName] = _reason(e);
         }
       }
     });
@@ -219,14 +219,22 @@ class DoReviewCommand extends DirCommand<void> {
     }
 
     for (final entry in failures.entries) {
+      // The reason comes last: it is an error message of its own and brings
+      // its own final period, so nothing may be appended behind it.
       ggLog(
         cWarn(
-          'No pull request for ${entry.key}: ${entry.value}. '
-          'Create it manually, or run "gg do review" again.',
+          'No pull request for ${entry.key}. Create it manually, or run '
+          '"gg do review" again. Reason: ${entry.value}',
         ),
       );
     }
   }
+
+  /// The message of [error] as it is shown to the user: the `Exception: `
+  /// prefix `toString` prepends says nothing the sentence around it does not
+  /// already say.
+  String _reason(Object error) =>
+      error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
 
   /// Returns [url] pointing directly at the changes of the pull request, so
   /// the reviewer lands on the diff instead of the conversation.
