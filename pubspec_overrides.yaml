@@ -28,3 +28,29 @@ dependency_overrides:
     path: ../gg_project_root
   gg_version:
     path: ../gg_version
+  gg_capture_print:
+    path: ../gg_capture_print
+  gg_console_colors:
+    path: ../gg_console_colors
+  gg_process:
+    path: ../gg_process
+  gg_is_github:
+    path: ../gg_is_github
+  gg_hash:
+    path: ../gg_hash
+  gg_lang:
+    path: ../gg_lang
+  gg_one_commit:
+    path: ../gg_one_commit
+  gg_one_core:
+    path: ../gg_one_core
+  gg_direct_json:
+    path: ../gg_direct_json
+  gg_test:
+    path: ../gg_test
+  gg_one_do_publish:
+    path: ../gg_one_do_publish
+  gg_merge:
+    path: ../gg_merge
+  gg_one_merge:
+    path: ../gg_one_merge
