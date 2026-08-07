@@ -271,14 +271,14 @@ packages:
       path: "../gg_multi_core"
       relative: true
     source: path
-    version: "1.0.1"
+    version: "1.0.3"
   gg_one:
     dependency: "direct main"
     description:
       path: "../gg_one"
       relative: true
     source: path
-    version: "12.9.2"
+    version: "12.9.3"
   gg_one_commit:
     dependency: transitive
     description:
@@ -308,7 +308,7 @@ packages:
       path: "../gg_one_merge"
       relative: true
     source: path
-    version: "1.0.1"
+    version: "1.0.2"
   gg_process:
     dependency: transitive
     description:
