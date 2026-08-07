@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2 - 2026-08-07
+
+### Fixed
+
+- Fix issue with azure URLs
+- Fix: The pull request for »dna« was created, but its url could not be read
+
 ## 1.0.1 - 2026-08-05
 
 ### Changed
