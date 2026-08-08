@@ -122,6 +122,7 @@ class DoPushCommand extends DirCommand<void> {
     bool? verbose,
     bool? majorVersions,
     bool? upgrade,
+    Map<String, dynamic> options = const {},
   }) => get(
     directory: directory,
     ggLog: ggLog,
