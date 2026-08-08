@@ -54,8 +54,11 @@ class DidReviewCommand extends DirCommand<void> {
   final DidPushCommand _didPushCommand;
 
   @override
-  Future<void> exec({required Directory directory, required GgLog ggLog}) =>
-      get(directory: directory, ggLog: ggLog);
+  Future<void> exec({
+    required Directory directory,
+    required GgLog ggLog,
+    Map<String, dynamic> options = const {},
+  }) => get(directory: directory, ggLog: ggLog);
 
   @override
   Future<void> get({required Directory directory, required GgLog ggLog}) async {

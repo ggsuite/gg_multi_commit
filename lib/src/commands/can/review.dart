@@ -65,6 +65,7 @@ class CanReviewCommand extends DirCommand<void> {
     bool? verbose,
     bool? force,
     bool? saveState,
+    Map<String, dynamic> options = const {},
   }) => get(
     directory: directory,
     ggLog: ggLog,
