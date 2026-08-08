@@ -268,18 +268,16 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: "56220a8633089da54818d3e0fff426ab2b75167edd49621b277b0fa3f1b88da6"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "2.0.0"
   gg_one:
     dependency: "direct main"
     description:
-      name: gg_one
-      sha256: "502f641f16e70ac6e13e78e7b957ac8364a70aac58dbbfbf072ee448623daa47"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one"
+      relative: true
+    source: path
     version: "13.0.0"
   gg_one_commit:
     dependency: transitive
@@ -298,12 +296,11 @@ packages:
     source: hosted
     version: "2.0.0"
   gg_one_do_publish:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_do_publish
-      sha256: cdcbca344930965ee7b025643fe30cd2f2252b0c1e626e6f5591f4a805855991
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_do_publish"
+      relative: true
+    source: path
     version: "2.0.0"
   gg_one_merge:
     dependency: transitive
