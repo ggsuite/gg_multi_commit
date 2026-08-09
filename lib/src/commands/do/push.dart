@@ -287,6 +287,10 @@ class DoPushCommand extends DirCommand<void> {
         ggLog: ggLog,
         message: message,
         userCommitMessage: gg.readTicketDescriptionForRepo,
+        // The upgrade tightened the constraints in pubspec.yaml, so the
+        // recorded »everything is committed« hash is stale — and `can merge`
+        // reads it through `did commit` right after this push.
+        stateKey: gg.GgState.doCommitKey,
       );
     }
   }

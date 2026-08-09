@@ -1085,6 +1085,7 @@ void main() {
           ggLog: any(named: 'ggLog'),
           message: '#gg: dart pub get',
           userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       ).called(1);
     });
@@ -1116,6 +1117,10 @@ void main() {
           ggLog: any(named: 'ggLog'),
           message: '#gg: dart pub upgrade --major-versions --tighten',
           userCommitMessage: any(named: 'userCommitMessage'),
+          // The upgrade rewrote pubspec.yaml, so the recorded »everything is
+          // committed« hash is stale — `can merge` reads it through
+          // `did commit` right after this push and would refuse the repo.
+          stateKey: gg.GgState.doCommitKey,
         ),
       ).captured;
 
@@ -1144,6 +1149,7 @@ void main() {
           ggLog: any(named: 'ggLog'),
           message: '#gg: dart pub upgrade --tighten',
           userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       ).called(1);
     });
