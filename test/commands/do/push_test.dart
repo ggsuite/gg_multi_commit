@@ -23,7 +23,7 @@ import 'package:test/test.dart';
 
 class MockGgDoPush extends Mock implements gg.DoPush {}
 
-class MockGgDoCommit extends Mock implements gg.DoCommit {}
+class MockGgSystemCommit extends Mock implements gg.GgSystemCommit {}
 
 class MockMainBranch extends Mock implements gg_publish.MainBranch {}
 
@@ -47,7 +47,7 @@ typedef PushTestBed = ({
   DoPushCommand command,
   MockProcessRunner git,
   MockGgDoPush ggDoPush,
-  MockGgDoCommit ggDoCommit,
+  MockGgSystemCommit systemCommit,
   MockIsCommitted isCommitted,
   MockUpgradeDepsCommand upgradeDeps,
   MockCanCommitCommand canCommitCmd,
@@ -99,6 +99,8 @@ void main() {
     when(
       () => m('git', [
         'merge',
+        '-m',
+        '${ggCommitPrefix}merge origin/main into the feature branch',
         'origin/main',
       ], workingDirectory: any(named: 'workingDirectory')),
     ).thenAnswer((_) async => ProcessResult(0, 0, 'Already up to date.', ''));
@@ -228,16 +230,26 @@ void main() {
       ),
     ).thenAnswer((_) async {});
 
-    final ggDoCommit = MockGgDoCommit();
+    final systemCommit = MockGgSystemCommit();
     when(
-      () => ggDoCommit.exec(
+      () => systemCommit.commit(
         directory: any(named: 'directory'),
         ggLog: any(named: 'ggLog'),
         message: any(named: 'message'),
-        updateChangeLog: any(named: 'updateChangeLog'),
-        force: any(named: 'force'),
+        paths: any(named: 'paths'),
+        includeUntracked: any(named: 'includeUntracked'),
+        ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+        userCommitMessage: any(named: 'userCommitMessage'),
+        stateKey: any(named: 'stateKey'),
       ),
-    ).thenAnswer((_) async {});
+    ).thenAnswer(
+      (_) async => const gg.GgSystemCommitResult(
+        userCommitCreated: false,
+        systemCommitCreated: true,
+        ggOwnedPaths: ['pubspec.lock'],
+        foreignPaths: [],
+      ),
+    );
 
     final isCommitted = MockIsCommitted();
     when(
@@ -292,7 +304,7 @@ void main() {
     final command = DoPushCommand(
       ggLog: ggLog,
       ggDoPush: ggDoPush,
-      ggDoCommit: ggDoCommit,
+      systemCommit: systemCommit,
       isCommitted: isCommitted,
       upgradeDependencies: upgradeDeps,
       canCommit: canCommitCmd,
@@ -305,7 +317,7 @@ void main() {
       command: command,
       git: git,
       ggDoPush: ggDoPush,
-      ggDoCommit: ggDoCommit,
+      systemCommit: systemCommit,
       isCommitted: isCommitted,
       upgradeDeps: upgradeDeps,
       canCommitCmd: canCommitCmd,
@@ -449,7 +461,7 @@ void main() {
       final command = DoPushCommand(
         ggLog: localLog,
         ggDoPush: bed.ggDoPush,
-        ggDoCommit: bed.ggDoCommit,
+        systemCommit: bed.systemCommit,
         isCommitted: bed.isCommitted,
         upgradeDependencies: bed.upgradeDeps,
         canCommit: bed.canCommitCmd,
@@ -536,6 +548,8 @@ void main() {
       verifyNever(
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
@@ -567,6 +581,8 @@ void main() {
       verifyInOrder([
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
         () => bed.git('dart', [
@@ -682,6 +698,8 @@ void main() {
         ], workingDirectory: path.join(ticketDir.path, 'A')),
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
         () => bed.git('git', [
@@ -691,6 +709,8 @@ void main() {
         ], workingDirectory: path.join(ticketDir.path, 'B')),
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'B')),
         // The pushes only start after every repo merged cleanly.
@@ -724,6 +744,8 @@ void main() {
       when(
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/master into the feature branch',
           'origin/master',
         ], workingDirectory: any(named: 'workingDirectory')),
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
@@ -735,6 +757,8 @@ void main() {
       verify(
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/master into the feature branch',
           'origin/master',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
       ).called(1);
@@ -758,6 +782,8 @@ void main() {
       verifyNever(
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
@@ -773,6 +799,8 @@ void main() {
         when(
           () => bed.git('git', [
             'merge',
+            '-m',
+            '${ggCommitPrefix}merge origin/main into the feature branch',
             'origin/main',
           ], workingDirectory: any(named: 'workingDirectory')),
         ).thenAnswer(
@@ -840,6 +868,8 @@ void main() {
         when(
           () => bed.git('git', [
             'merge',
+            '-m',
+            '${ggCommitPrefix}merge origin/main into the feature branch',
             'origin/main',
           ], workingDirectory: any(named: 'workingDirectory')),
         ).thenAnswer(
@@ -904,6 +934,8 @@ void main() {
         ),
         () => bed.git('git', [
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
         () => bed.upgradeDeps.exec(
@@ -1048,12 +1080,11 @@ void main() {
       ).run(['push', '--input', ticketDir.path, '--no-upgrade']);
 
       verify(
-        () => bed.ggDoCommit.exec(
+        () => bed.systemCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: '#gg: dart pub get',
-          updateChangeLog: false,
-          force: false,
+          userCommitMessage: any(named: 'userCommitMessage'),
         ),
       ).called(1);
     });
@@ -1080,12 +1111,11 @@ void main() {
       await runner(bed.command).run(['push', '--input', ticketDir.path]);
 
       final captured = verify(
-        () => bed.ggDoCommit.exec(
+        () => bed.systemCommit.commit(
           directory: captureAny(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: '#gg: dart pub upgrade --major-versions --tighten',
-          updateChangeLog: false,
-          force: false,
+          userCommitMessage: any(named: 'userCommitMessage'),
         ),
       ).captured;
 
@@ -1109,12 +1139,11 @@ void main() {
       ).run(['push', '--input', ticketDir.path, '--no-major-versions']);
 
       verify(
-        () => bed.ggDoCommit.exec(
+        () => bed.systemCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: '#gg: dart pub upgrade --tighten',
-          updateChangeLog: false,
-          force: false,
+          userCommitMessage: any(named: 'userCommitMessage'),
         ),
       ).called(1);
     });
@@ -1200,12 +1229,15 @@ void main() {
       ).thenAnswer((_) async => callCount++ == 0);
 
       when(
-        () => bed.ggDoCommit.exec(
+        () => bed.systemCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
+          paths: any(named: 'paths'),
+          includeUntracked: any(named: 'includeUntracked'),
+          ammendWhenNotPushed: any(named: 'ammendWhenNotPushed'),
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
         ),
       ).thenThrow(Exception('Cannot commit on branch »main«.'));
 

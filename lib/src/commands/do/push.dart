@@ -70,7 +70,7 @@ class DoPushCommand extends DirCommand<void> {
     super.name = 'push',
     super.description = 'Merge main into the ticket repos and push them',
     gg.DoPush? ggDoPush,
-    gg.DoCommit? ggDoCommit,
+    gg.GgSystemCommit? systemCommit,
     IsCommitted? isCommitted,
     UpgradeDepsCommand? upgradeDependencies,
     CanCommitCommand? canCommit,
@@ -78,7 +78,7 @@ class DoPushCommand extends DirCommand<void> {
     ProcessRunner? processRunner,
     gg_publish.MainBranch? mainBranch,
   }) : _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
-       _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
+       _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _isCommitted = isCommitted ?? IsCommitted(ggLog: ggLog),
        _upgradeDependencies =
            upgradeDependencies ?? UpgradeDepsCommand(ggLog: ggLog),
@@ -94,7 +94,7 @@ class DoPushCommand extends DirCommand<void> {
   final gg.DoPush _ggDoPush;
 
   /// Records the changes of the upgrade phase as a `#gg:` system commit.
-  final gg.DoCommit _ggDoCommit;
+  final gg.GgSystemCommit _systemCommit;
 
   /// Checks whether everything in a repository is committed.
   final IsCommitted _isCommitted;
@@ -267,9 +267,9 @@ class DoPushCommand extends DirCommand<void> {
     // Without the upgrade phase only the post-merge `pub get` can have
     // changed something — name the commit after what actually ran.
     final message = upgrade
-        ? '${PublishSkipCheck.ggCommitPrefix}dart pub upgrade '
+        ? '${ggCommitPrefix}dart pub upgrade '
               '${majorVersions ? '--major-versions ' : ''}--tighten'
-        : '${PublishSkipCheck.ggCommitPrefix}dart pub get';
+        : '${ggCommitPrefix}dart pub get';
 
     for (final node in nodes) {
       final repoDir = node.directory;
@@ -280,14 +280,14 @@ class DoPushCommand extends DirCommand<void> {
       if (isCommitted) {
         continue;
       }
-      await _ggDoCommit.exec(
+      // A system commit, not »gg do commit«: it must contain gg's own files
+      // only. Anything else the user left dirty is saved in its own,
+      // prefix-less commit first — the ticket description names it.
+      await _systemCommit.commit(
         directory: repoDir,
         ggLog: ggLog,
         message: message,
-        // Bookkeeping, not a change of the package — keep it out of
-        // CHANGELOG.md (»gg do commit --no-log«).
-        updateChangeLog: false,
-        force: false,
+        userCommitMessage: gg.readTicketDescriptionForRepo,
       );
     }
   }
@@ -394,6 +394,8 @@ class DoPushCommand extends DirCommand<void> {
 
         final result = await _processRunner('git', <String>[
           'merge',
+          '-m',
+          '${ggCommitPrefix}merge origin/$mainBranch into the feature branch',
           'origin/$mainBranch',
         ], workingDirectory: repoDir.path);
 
@@ -736,8 +738,7 @@ class DoPushCommand extends DirCommand<void> {
       if (onMainByContent.contains(hash)) {
         continue;
       }
-      if (subject.startsWith(PublishSkipCheck.ggCommitPrefix) ||
-          PublishSkipCheck.legacyGgCommitMessages.contains(subject)) {
+      if (isGgGenerated(subject)) {
         continue;
       }
       return false;
