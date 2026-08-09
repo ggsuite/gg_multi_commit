@@ -8,16 +8,15 @@ import 'dart:io';
 
 import 'package:gg_args/gg_args.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
-import 'package:gg_git/gg_git.dart';
 import 'package:gg_lang/gg_lang.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
+import 'package:gg_git/gg_git.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_publish/gg_publish.dart' as gg_publish;
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
 
-import 'package:gg_multi_core/gg_multi_core.dart' as git_snapshot;
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
@@ -70,7 +69,7 @@ class DoPushCommand extends DirCommand<void> {
     super.name = 'push',
     super.description = 'Merge main into the ticket repos and push them',
     gg.DoPush? ggDoPush,
-    gg.DoCommit? ggDoCommit,
+    gg.GgSystemCommit? systemCommit,
     IsCommitted? isCommitted,
     UpgradeDepsCommand? upgradeDependencies,
     CanCommitCommand? canCommit,
@@ -78,7 +77,7 @@ class DoPushCommand extends DirCommand<void> {
     ProcessRunner? processRunner,
     gg_publish.MainBranch? mainBranch,
   }) : _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
-       _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
+       _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _isCommitted = isCommitted ?? IsCommitted(ggLog: ggLog),
        _upgradeDependencies =
            upgradeDependencies ?? UpgradeDepsCommand(ggLog: ggLog),
@@ -94,7 +93,7 @@ class DoPushCommand extends DirCommand<void> {
   final gg.DoPush _ggDoPush;
 
   /// Records the changes of the upgrade phase as a `#gg:` system commit.
-  final gg.DoCommit _ggDoCommit;
+  final gg.GgSystemCommit _systemCommit;
 
   /// Checks whether everything in a repository is committed.
   final IsCommitted _isCommitted;
@@ -267,9 +266,9 @@ class DoPushCommand extends DirCommand<void> {
     // Without the upgrade phase only the post-merge `pub get` can have
     // changed something — name the commit after what actually ran.
     final message = upgrade
-        ? '${PublishSkipCheck.ggCommitPrefix}dart pub upgrade '
+        ? '${gg.ggCommitPrefix}dart pub upgrade '
               '${majorVersions ? '--major-versions ' : ''}--tighten'
-        : '${PublishSkipCheck.ggCommitPrefix}dart pub get';
+        : '${gg.ggCommitPrefix}dart pub get';
 
     for (final node in nodes) {
       final repoDir = node.directory;
@@ -280,14 +279,18 @@ class DoPushCommand extends DirCommand<void> {
       if (isCommitted) {
         continue;
       }
-      await _ggDoCommit.exec(
+      // A system commit, not »gg do commit«: it must contain gg's own files
+      // only. Anything else the user left dirty is saved in its own,
+      // prefix-less commit first — the ticket description names it.
+      await _systemCommit.commit(
         directory: repoDir,
         ggLog: ggLog,
         message: message,
-        // Bookkeeping, not a change of the package — keep it out of
-        // CHANGELOG.md (»gg do commit --no-log«).
-        updateChangeLog: false,
-        force: false,
+        userCommitMessage: gg.readTicketDescriptionForRepo,
+        // The upgrade tightened the constraints in pubspec.yaml, so the
+        // recorded »everything is committed« hash is stale — and `can merge`
+        // reads it through `did commit` right after this push.
+        stateKey: gg.GgState.doCommitKey,
       );
     }
   }
@@ -394,6 +397,8 @@ class DoPushCommand extends DirCommand<void> {
 
         final result = await _processRunner('git', <String>[
           'merge',
+          '-m',
+          '${gg.ggCommitPrefix}merge origin/$mainBranch into the feature branch',
           'origin/$mainBranch',
         ], workingDirectory: repoDir.path);
 
@@ -491,13 +496,13 @@ class DoPushCommand extends DirCommand<void> {
 
   // ...........................................................................
   /// Runs git with [args] in [repoDir] and returns the trimmed stdout.
-  /// Delegates to the shared [git_snapshot.runGit] so `do push` and
+  /// Delegates to the shared [runGit] so `do push` and
   /// `do publish` use one git runner. See there for [allowFailure].
   Future<String> _runGit(
     List<String> args, {
     required Directory repoDir,
     bool allowFailure = false,
-  }) => git_snapshot.runGit(
+  }) => runGit(
     _processRunner,
     args,
     repoDir: repoDir,
@@ -736,8 +741,7 @@ class DoPushCommand extends DirCommand<void> {
       if (onMainByContent.contains(hash)) {
         continue;
       }
-      if (subject.startsWith(PublishSkipCheck.ggCommitPrefix) ||
-          PublishSkipCheck.legacyGgCommitMessages.contains(subject)) {
+      if (gg.isGgGenerated(subject)) {
         continue;
       }
       return false;
