@@ -9,4 +9,4 @@
 // coverage:ignore-file
 
 /// The version of the `gg_multi_commit` package.
-const String ggMultiCommitVersion = '2.0.0';
+const String ggMultiCommitVersion = '2.1.0';
