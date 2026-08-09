@@ -17,7 +17,6 @@ import 'package:gg_publish/gg_publish.dart' as gg_publish;
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
 
-import 'package:gg_multi_core/gg_multi_core.dart' as git_snapshot;
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
@@ -493,13 +492,13 @@ class DoPushCommand extends DirCommand<void> {
 
   // ...........................................................................
   /// Runs git with [args] in [repoDir] and returns the trimmed stdout.
-  /// Delegates to the shared [git_snapshot.runGit] so `do push` and
+  /// Delegates to the shared [runGit] so `do push` and
   /// `do publish` use one git runner. See there for [allowFailure].
   Future<String> _runGit(
     List<String> args, {
     required Directory repoDir,
     bool allowFailure = false,
-  }) => git_snapshot.runGit(
+  }) => runGit(
     _processRunner,
     args,
     repoDir: repoDir,

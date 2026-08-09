@@ -6,6 +6,7 @@
 
 - Improve commit behavior
 - Move gg commit conventions from gg_git to gg_one_core
+- Move the git and process plumbing to gg_git
 
 ## 2.1.0 - 2026-08-09
 
