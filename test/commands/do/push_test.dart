@@ -7,8 +7,8 @@
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
-import 'package:gg_git/gg_git.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
+import 'package:gg_git/gg_git.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
@@ -100,7 +100,7 @@ void main() {
       () => m('git', [
         'merge',
         '-m',
-        '${ggCommitPrefix}merge origin/main into the feature branch',
+        '${gg.ggCommitPrefix}merge origin/main into the feature branch',
         'origin/main',
       ], workingDirectory: any(named: 'workingDirectory')),
     ).thenAnswer((_) async => ProcessResult(0, 0, 'Already up to date.', ''));
@@ -549,7 +549,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/main into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
@@ -582,7 +582,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/main into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
         () => bed.git('dart', [
@@ -699,7 +699,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/main into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
         () => bed.git('git', [
@@ -710,7 +710,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/main into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'B')),
         // The pushes only start after every repo merged cleanly.
@@ -745,7 +745,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/master into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/master into the feature branch',
           'origin/master',
         ], workingDirectory: any(named: 'workingDirectory')),
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
@@ -758,7 +758,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/master into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/master into the feature branch',
           'origin/master',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
       ).called(1);
@@ -783,7 +783,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/main into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
@@ -800,7 +800,7 @@ void main() {
           () => bed.git('git', [
             'merge',
             '-m',
-            '${ggCommitPrefix}merge origin/main into the feature branch',
+            '${gg.ggCommitPrefix}merge origin/main into the feature branch',
             'origin/main',
           ], workingDirectory: any(named: 'workingDirectory')),
         ).thenAnswer(
@@ -869,7 +869,7 @@ void main() {
           () => bed.git('git', [
             'merge',
             '-m',
-            '${ggCommitPrefix}merge origin/main into the feature branch',
+            '${gg.ggCommitPrefix}merge origin/main into the feature branch',
             'origin/main',
           ], workingDirectory: any(named: 'workingDirectory')),
         ).thenAnswer(
@@ -935,7 +935,7 @@ void main() {
         () => bed.git('git', [
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/main into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
         () => bed.upgradeDeps.exec(

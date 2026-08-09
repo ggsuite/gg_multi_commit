@@ -8,9 +8,9 @@ import 'dart:io';
 
 import 'package:gg_args/gg_args.dart';
 import 'package:gg_console_colors/gg_console_colors.dart';
-import 'package:gg_git/gg_git.dart';
 import 'package:gg_lang/gg_lang.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
+import 'package:gg_git/gg_git.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_publish/gg_publish.dart' as gg_publish;
@@ -267,9 +267,9 @@ class DoPushCommand extends DirCommand<void> {
     // Without the upgrade phase only the post-merge `pub get` can have
     // changed something — name the commit after what actually ran.
     final message = upgrade
-        ? '${ggCommitPrefix}dart pub upgrade '
+        ? '${gg.ggCommitPrefix}dart pub upgrade '
               '${majorVersions ? '--major-versions ' : ''}--tighten'
-        : '${ggCommitPrefix}dart pub get';
+        : '${gg.ggCommitPrefix}dart pub get';
 
     for (final node in nodes) {
       final repoDir = node.directory;
@@ -395,7 +395,7 @@ class DoPushCommand extends DirCommand<void> {
         final result = await _processRunner('git', <String>[
           'merge',
           '-m',
-          '${ggCommitPrefix}merge origin/$mainBranch into the feature branch',
+          '${gg.ggCommitPrefix}merge origin/$mainBranch into the feature branch',
           'origin/$mainBranch',
         ], workingDirectory: repoDir.path);
 
@@ -738,7 +738,7 @@ class DoPushCommand extends DirCommand<void> {
       if (onMainByContent.contains(hash)) {
         continue;
       }
-      if (isGgGenerated(subject)) {
+      if (gg.isGgGenerated(subject)) {
         continue;
       }
       return false;
