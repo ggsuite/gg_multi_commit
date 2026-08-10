@@ -5,6 +5,11 @@
 ### Changed
 
 - Don't review skipped packages
+## 2.2.1 - 2026-08-10
+
+### Removed
+
+- Merge .ticket with ticket.json. Remove usage of .ticket
 
 ## 2.2.0 - 2026-08-09
 
