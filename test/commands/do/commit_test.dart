@@ -323,4 +323,192 @@ void main() {
       expect(committedMessages, ['From code', 'From code']);
     });
   });
+
+  group('nextCommitMessage from publish_config.json', () {
+    Directory repo(String name) => Directory(path.join(ticketDir.path, name));
+
+    Future<void> proposeIn(
+      String name, {
+      required String firstLine,
+      List<String>? details,
+    }) => gg.RepoPublishConfig(
+      nextCommitMessage: gg.CommitMessage(
+        firstLine: firstLine,
+        details: details,
+      ),
+    ).save(file: gg.repoPublishConfigFile(repo(name)));
+
+    Future<void> run({String? message, EditMessage? edit}) async {
+      final runner = CommandRunner<void>('test', 'do commit ticket')
+        ..addCommand(
+          DoCommitCommand(
+            ggLog: ggLog,
+            ggDoCommit: recordingDoCommit(),
+            editMessage: edit ?? editMessage(),
+          ),
+        );
+      await runner.run([
+        'commit',
+        '--input',
+        ticketDir.path,
+        if (message != null) ...['--message', message],
+      ]);
+    }
+
+    test('proposes the per-repo message and shares the rest', () async {
+      // Only A carries a proposal — B keeps the one shared ticket message.
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      File(
+        path.join(ticketDir.path, ticketJsonFileName),
+      ).writeAsStringSync('{"description": "Ticket desc"}');
+
+      await run();
+
+      // The ticket-wide editor ran once, A's own editor once — pre-filled
+      // with its own proposal, never with another repo's.
+      expect(capturedInitials, ['Ticket desc', 'Adapt message.json']);
+      expect(committedMessages, ['Adapt message.json', 'Ticket desc']);
+    });
+
+    test('asks no shared message when every repo proposes one', () async {
+      await proposeIn('A', firstLine: 'A change');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run();
+
+      expect(capturedInitials, ['A change', 'B change']);
+      expect(committedMessages, ['A change', 'B change']);
+    });
+
+    test('commits the details as the message body', () async {
+      await proposeIn(
+        'A',
+        firstLine: 'Adapt message.json',
+        details: ['Detail 0', 'Detail 1'],
+      );
+      await proposeIn('B', firstLine: 'B change');
+
+      await run();
+
+      expect(
+        committedMessages.first,
+        'Adapt message.json\n\nDetail 0\nDetail 1',
+      );
+    });
+
+    test('records the commit and keeps the proposal', () async {
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run();
+
+      final config = gg.RepoPublishConfig.tryLoad(repo('A'))!;
+      expect(config.commits.single.firstLine, 'Adapt message.json');
+      // The proposal is not consumed — the AI keeps it up to date.
+      expect(config.nextCommitMessage?.firstLine, 'Adapt message.json');
+    });
+
+    test('records no duplicate on a second identical run', () async {
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run();
+      await run();
+
+      expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, hasLength(1));
+    });
+
+    test('records nothing when the commit failed', () async {
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      await proposeIn('B', firstLine: 'B change');
+
+      final failing = MockGgDoCommit();
+      when(
+        () => failing.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          logType: any(named: 'logType'),
+          updateChangeLog: any(named: 'updateChangeLog'),
+          force: any(named: 'force'),
+        ),
+      ).thenThrow(Exception('nope'));
+
+      final runner = CommandRunner<void>('test', 'do commit ticket')
+        ..addCommand(
+          DoCommitCommand(
+            ggLog: ggLog,
+            ggDoCommit: failing,
+            editMessage: editMessage(),
+          ),
+        );
+      await expectLater(
+        () => runner.run(['commit', '--input', ticketDir.path]),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
+    });
+
+    test('re-opens the editor on a too long first line', () async {
+      await proposeIn('A', firstLine: 'ok');
+      await proposeIn('B', firstLine: 'B change');
+
+      var call = 0;
+      await run(
+        edit: (initial) async {
+          capturedInitials.add(initial);
+          call++;
+          return call == 1 ? 'a' * 61 : 'Corrected';
+        },
+      );
+
+      expect(messages.any((m) => m.contains('60 characters')), isTrue);
+      expect(committedMessages.first, 'Corrected');
+    });
+
+    test('gives up after three invalid attempts', () async {
+      await proposeIn('A', firstLine: 'ok');
+      await proposeIn('B', firstLine: 'B change');
+
+      await expectLater(
+        () => run(edit: (_) async => 'a' * 61),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        messages.any((m) => m.contains('still invalid after 3 attempts')),
+        isTrue,
+      );
+    });
+
+    test('rejects a -m whose first line is too long', () async {
+      await proposeIn('A', firstLine: 'ok');
+      await proposeIn('B', firstLine: 'B change');
+
+      await expectLater(
+        () => run(message: 'a' * 61),
+        throwsA(isA<Exception>()),
+      );
+      expect(messages.any((m) => m.contains('Invalid commit message')), isTrue);
+    });
+
+    test('-m wins over the proposal', () async {
+      await proposeIn('A', firstLine: 'proposed');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run(message: 'From the flag');
+
+      expect(capturedInitials, isEmpty);
+      expect(committedMessages, ['From the flag', 'From the flag']);
+    });
+
+    test('falls back to the proposal when the edit is cleared', () async {
+      await proposeIn('A', firstLine: 'proposed');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run(edit: editMessage('   '));
+
+      expect(committedMessages.first, 'proposed');
+    });
+  });
 }

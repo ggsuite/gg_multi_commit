@@ -187,12 +187,13 @@ class DoReviewCommand extends DirCommand<void> {
 
   /// Plans what the ticket releases and stores the answers for the publish.
   ///
-  /// The configuration is read back first, so a repo that was answered in an
-  /// earlier review run is not asked again — only what is missing is. A file
-  /// still carrying the progress markers of an unfinished publish is left
-  /// exactly as it is: its answers are used, nothing is asked and nothing is
-  /// written, because overwriting it would strand the `--continue` that is
-  /// supposed to finish that run.
+  /// Each repository's `publish_config.json` is read back first, so the
+  /// questions arrive with the answers of an earlier run pre-selected — they
+  /// are asked again, because a choice made earlier has to stay correctable.
+  /// A repository still carrying the progress of an unfinished publish is
+  /// left exactly as it is: its answers are used, nothing is asked and
+  /// nothing is written, because overwriting it would strand the `--continue`
+  /// that is supposed to finish that run.
   ///
   /// Nothing here may fail the review: the push already succeeded, and a
   /// plan that cannot be made is one the publish makes later.
@@ -201,26 +202,16 @@ class DoReviewCommand extends DirCommand<void> {
     required List<Node> subs,
     required GgLog ggLog,
   }) async {
-    final file = publishConfigFileFor(ticketDir);
-    gg.PublishConfig? existing;
-    if (file.existsSync()) {
-      try {
-        existing = gg.PublishConfig.load(
-          configArg: file.path,
-          fallbackDir: ticketDir.path,
-        );
-      } catch (e) {
-        ggLog(cWarn('⚠️ Ignoring ${file.path}: ${_reason(e)}'));
-      }
-    }
-
-    final unfinishedPublish =
-        existing?.repos.values.any((r) => r.status != null) ?? false;
+    final unfinishedPublish = anyRepoHasStatus(
+      repoDirs: subs.map((node) => node.directory),
+      ticketDir: ticketDir,
+    );
     if (unfinishedPublish) {
       ggLog(
         cWarn(
-          '⚠️ An unfinished publish is in progress — leaving ${file.path} '
-          'untouched. Finish it with "gg do publish --continue".',
+          '⚠️ An unfinished publish is in progress — leaving the publish '
+          'configuration untouched. Finish it with '
+          '"gg do publish --continue".',
         ),
       );
     }
@@ -229,7 +220,6 @@ class DoReviewCommand extends DirCommand<void> {
       ticketDir: ticketDir,
       subs: subs,
       ggLog: ggLog,
-      config: existing,
       // A review is not a release: it never forces one, and it never fails
       // for a question a headless run cannot answer — `do publish` asks it.
       ask: !unfinishedPublish,
@@ -238,7 +228,7 @@ class DoReviewCommand extends DirCommand<void> {
     );
 
     if (!unfinishedPublish && plan.anyPublishes) {
-      await plan.config.save(file: file);
+      await plan.save();
     }
 
     return plan;
@@ -256,8 +246,9 @@ class DoReviewCommand extends DirCommand<void> {
   ///
   /// The title is the repo's merge message, the very text that will describe
   /// the change when it lands; the ticket description and finally the ticket
-  /// name stand in when the plan has none. An already open pull request keeps
-  /// the title it has.
+  /// name stand in when the plan has none. The description lists the commits
+  /// the ticket made in that repository, as recorded in its
+  /// `publish_config.json`. An already open pull request keeps what it has.
   ///
   /// The pull requests are created **without** the auto-merge flag: the
   /// ticket is under review, not ready to land. `gg do publish` reuses them
@@ -305,6 +296,7 @@ class DoReviewCommand extends DirCommand<void> {
             directory: entry.directory,
             ggLog: taskLog,
             message: entry.mergeMessage ?? fallbackMessage,
+            body: entry.pullRequestBody,
           );
           if (url != null) {
             urls[entry.name] = _changesUrl(url);
