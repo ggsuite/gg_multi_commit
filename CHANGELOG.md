@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Make sure »dart pub upgrade --tighten --major-versions« is called before publishing
+
 ## 3.0.0 - 2026-08-10
 
 ## 2.3.1 - 2026-08-10
