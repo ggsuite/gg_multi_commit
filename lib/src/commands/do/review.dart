@@ -103,7 +103,7 @@ class DoReviewCommand extends DirCommand<void> {
     required GgLog ggLog,
     bool? verbose,
   }) async {
-    ggLog(cH1('\nReviewing ...'));
+    ggLog(cH1('\nPrepare review'));
 
     verbose ??= argResults?['verbose'] as bool? ?? false;
 
