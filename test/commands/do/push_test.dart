@@ -384,7 +384,7 @@ void main() {
           equals('✓ Pushed'),
           equals('\nB'),
           equals('✓ Pushed'),
-          equals('\n✓ All repos pushed\n'),
+          equals('\nAll repos pushed\n'),
         ]),
       );
     });
@@ -491,7 +491,7 @@ void main() {
           equals('✓ Pushed'),
           equals('\nB'),
           equals('✓ Pushed'),
-          equals('\n✓ All repos pushed\n'),
+          equals('\nAll repos pushed\n'),
         ]),
       );
       // The merge details are verbose-only.
@@ -788,7 +788,7 @@ void main() {
         ], workingDirectory: any(named: 'workingDirectory')),
       );
       expect(messages, contains('✓ A has no main branch — nothing to merge'));
-      expect(messages, contains('\n✓ All repos pushed\n'));
+      expect(messages, contains('\nAll repos pushed\n'));
     });
 
     test(
@@ -1325,7 +1325,7 @@ void main() {
           'TICKP',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
-      expect(messages, contains('\n✓ All repos pushed\n'));
+      expect(messages, contains('\nAll repos pushed\n'));
     });
 
     test(
@@ -1351,7 +1351,7 @@ void main() {
             'TICKP',
           ], workingDirectory: any(named: 'workingDirectory')),
         );
-        expect(messages, contains('\n✓ All repos pushed\n'));
+        expect(messages, contains('\nAll repos pushed\n'));
       },
     );
 
@@ -1375,7 +1375,7 @@ void main() {
           'HEAD',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
-      expect(messages, contains('\n✓ All repos pushed\n'));
+      expect(messages, contains('\nAll repos pushed\n'));
     });
 
     test('replaces an obsolete remote branch — one whose commits are on main '
