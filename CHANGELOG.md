@@ -5,6 +5,8 @@
 ### Changed
 
 - Don't review skipped packages
+- Merge origin/main
+
 ## 2.2.1 - 2026-08-10
 
 ### Removed
