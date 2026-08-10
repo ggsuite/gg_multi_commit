@@ -205,7 +205,7 @@ void main() {
     });
   });
 
-  group('commit message default from .ticket', () {
+  group('commit message default from ticket.json', () {
     /// Runs `do commit` on [ticketDir], optionally with `-m` [message].
     Future<void> run({String? message, EditMessage? edit}) async {
       final runner = CommandRunner<void>('test', 'do commit ticket')
@@ -226,7 +226,7 @@ void main() {
 
     test('reuses the ticket description when no message is given', () async {
       File(
-        path.join(ticketDir.path, '.ticket'),
+        path.join(ticketDir.path, ticketJsonFileName),
       ).writeAsStringSync('{"description": "Ticket desc"}');
 
       await run();
@@ -238,7 +238,7 @@ void main() {
 
     test('commits the edited message', () async {
       File(
-        path.join(ticketDir.path, '.ticket'),
+        path.join(ticketDir.path, ticketJsonFileName),
       ).writeAsStringSync('{"description": "Ticket desc"}');
 
       await run(edit: editMessage('Edited message'));
@@ -248,7 +248,7 @@ void main() {
 
     test('falls back to the description when the edit is cleared', () async {
       File(
-        path.join(ticketDir.path, '.ticket'),
+        path.join(ticketDir.path, ticketJsonFileName),
       ).writeAsStringSync('{"description": "Ticket desc"}');
 
       await run(edit: editMessage('   '));
@@ -258,7 +258,7 @@ void main() {
 
     test('does not offer an edit when -m is given', () async {
       File(
-        path.join(ticketDir.path, '.ticket'),
+        path.join(ticketDir.path, ticketJsonFileName),
       ).writeAsStringSync('{"description": "Ticket desc"}');
 
       await run(message: '  Explicit message  ');
@@ -267,14 +267,17 @@ void main() {
       expect(committedMessages, ['Explicit message', 'Explicit message']);
     });
 
-    test('offers an empty edit when there is no .ticket description', () async {
-      await run();
+    test(
+      'offers an empty edit when there is no ticket.json description',
+      () async {
+        await run();
 
-      expect(capturedInitials, ['']);
-      // Neither -m nor a description nor an edit: gg do commit decides, and
-      // only complains about repos that actually have something to commit.
-      expect(committedMessages, [null, null]);
-    });
+        expect(capturedInitials, ['']);
+        // Neither -m nor a description nor an edit: gg do commit decides, and
+        // only complains about repos that actually have something to commit.
+        expect(committedMessages, [null, null]);
+      },
+    );
 
     test('passes no message when the edit stays empty', () async {
       await run(edit: editMessage('  '));
@@ -286,7 +289,7 @@ void main() {
       final emptyTicket = Directory(path.join(ticketsDir.path, 'EMPTY'))
         ..createSync();
       File(
-        path.join(emptyTicket.path, '.ticket'),
+        path.join(emptyTicket.path, ticketJsonFileName),
       ).writeAsStringSync('{"description": "Ticket desc"}');
 
       final runner = CommandRunner<void>('test', 'do commit ticket')
