@@ -236,7 +236,7 @@ void main() {
       );
       expect(messages, [
         '\n'
-            'Reviewing ...',
+            'Prepare review',
         'Please run this command inside a ticket folder.',
       ]);
     });
@@ -306,7 +306,7 @@ void main() {
       ]);
 
       expect(messages, [
-        '\nReviewing ...',
+        '\nPrepare review',
         '⌛️ Can review?',
         '✓ Can review?',
         // The planning pass announces the repo it asks the publish

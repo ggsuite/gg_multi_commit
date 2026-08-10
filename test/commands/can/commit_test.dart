@@ -16,7 +16,26 @@ import 'package:test/test.dart';
 
 class MockGgCanCommit extends Mock implements gg.CanCommit {}
 
+class MockGgDidCommit extends Mock implements gg.DidCommit {}
+
 class FakeDirectory extends Fake implements Directory {}
+
+/// A [gg.DidCommit] answering every repo with [committed].
+MockGgDidCommit mockDidCommit(bool committed) {
+  final mock = MockGgDidCommit();
+  when(
+    () => mock.get(
+      directory: any(named: 'directory'),
+      ggLog: any(named: 'ggLog'),
+    ),
+  ).thenAnswer((invocation) async {
+    // The command drops this output — calling it proves the sink is a valid
+    // one and covers the closure it passes in.
+    (invocation.namedArguments[#ggLog] as void Function(String))('ignored');
+    return committed;
+  });
+  return mock;
+}
 
 void main() {
   late Directory tempDir;
@@ -89,10 +108,39 @@ void main() {
 
       final runner = CommandRunner<void>('test', 'can commit ticket')
         ..addCommand(
-          CanCommitCommand(ggLog: ggLog, ggCanCommit: mockGgCanCommit),
+          CanCommitCommand(
+            ggLog: ggLog,
+            ggCanCommit: mockGgCanCommit,
+            ggDidCommit: mockDidCommit(false),
+          ),
         );
       await runner.run(['commit', '--input', ticketDir.path]);
       expect(messages.first.split('\n'), ['', 'A']);
+
+      // Something is still open, so the repos only *can* be committed.
+      expect(messages.last, '\nAll repos can be committed\n');
+    });
+
+    test('reports »committed« when every repo is committed already', () async {
+      final mockGgCanCommit = MockGgCanCommit();
+
+      when(
+        () => mockGgCanCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenAnswer((_) async {});
+
+      final runner = CommandRunner<void>('test', 'can commit ticket')
+        ..addCommand(
+          CanCommitCommand(
+            ggLog: ggLog,
+            ggCanCommit: mockGgCanCommit,
+            ggDidCommit: mockDidCommit(true),
+          ),
+        );
+      await runner.run(['commit', '--input', ticketDir.path]);
+      expect(messages.last, '\nAll repos committed.\n');
     });
 
     test('aborts on first repo that fails', () async {
@@ -112,7 +160,11 @@ void main() {
 
       final runner = CommandRunner<void>('test', 'can commit ticket')
         ..addCommand(
-          CanCommitCommand(ggLog: ggLog, ggCanCommit: mockGgCanCommit),
+          CanCommitCommand(
+            ggLog: ggLog,
+            ggCanCommit: mockGgCanCommit,
+            ggDidCommit: mockDidCommit(false),
+          ),
         );
       await expectLater(
         () async => await runner.run(['commit', '--input', ticketDir.path]),
