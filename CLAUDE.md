@@ -14,7 +14,7 @@ All commands extend `DirCommand<T>` from `gg_args`; the primary logic lives in `
 
 `DoCommitCommand` (in `lib/src/commands/do/commit.dart`) commits every ticket repo in dependency order with one shared message, delegating to gg_one's `gg do commit` per repo.
 
-**Message resolution**: an explicit `-m`/`--message` is used as-is. Without one, the ticket description — read from the root `.ticket` file via `readTicketDescription` (gg_multi_core) — seeds the interactive editor (`interact`'s `Input`, guarded by gg_one's `throwWhenNotATerminal` so headless runs fail fast). The edited text wins; clearing it falls back to the description. When nothing resolves, `null` is forwarded and gg_one decides — it only demands a message from repos that actually have something to commit. The prompt is skipped for an empty ticket and whenever a message was passed, so `do commit -m …` stays non-interactive.
+**Message resolution**: an explicit `-m`/`--message` is used as-is. Without one, the ticket description — read from the root `ticket.json` via `readTicketDescription` (gg_multi_core) — seeds the interactive editor (`interact`'s `Input`, guarded by gg_one's `throwWhenNotATerminal` so headless runs fail fast). The edited text wins; clearing it falls back to the description. When nothing resolves, `null` is forwarded and gg_one decides — it only demands a message from repos that actually have something to commit. The prompt is skipped for an empty ticket and whenever a message was passed, so `do commit -m …` stays non-interactive.
 
 **gg's own bookkeeping commits never write a CHANGELOG entry.** Every internal `gg do commit` — the `#gg:` commits of the flows — passes `updateChangeLog: false`. The `#gg: ` prefix alone does **not** suppress the entry.
 

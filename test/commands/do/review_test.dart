@@ -401,7 +401,7 @@ void main() {
 
   group('DoReviewCommand pull requests', () {
     test('use the ticket description as message', () async {
-      File(path.join(ticketDir.path, '.ticket')).writeAsStringSync(
+      File(path.join(ticketDir.path, ticketJsonFileName)).writeAsStringSync(
         jsonEncode(<String, String>{
           'issue_id': 'TICKDR',
           'description': 'Create pull requests while reviewing',
