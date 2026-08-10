@@ -6,3 +6,13 @@
 dependency_overrides:
   gg_multi_core:
     path: ../gg_multi_core
+  gg_one:
+    path: ../gg_one
+  gg_one_commit:
+    path: ../gg_one_commit
+  gg_one_core:
+    path: ../gg_one_core
+  gg_one_do_publish:
+    path: ../gg_one_do_publish
+  gg_one_merge:
+    path: ../gg_one_merge
