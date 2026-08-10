@@ -27,10 +27,21 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 ///    committed.
 /// 2. `do push` brings every repo onto the remote — merging the main branches
 ///    into the feature branches on the way (see [DoPushCommand]).
-/// 3. A pull request is opened (or reused) per repo and its url printed.
-/// 4. The ticket hash is stored as `didReview` in `<ticket>/.gg.json`, so
+/// 3. The run is **planned** ([PublishPlanner]): which repos does the ticket
+///    actually release, and with which version increment and merge message?
+/// 4. A pull request is opened (or reused) for each of *those* repos and its
+///    url printed — titled with the repo's merge message.
+/// 5. The ticket hash is stored as `didReview` in `<ticket>/.gg.json`, so
 ///    `gg did review` can answer whether the current state was reviewed and
 ///    `gg do publish` refuses a state that was not.
+///
+/// **Why the questions are asked here.** A ticket carries repos that are only
+/// part of it because they sit between two changed packages; they are neither
+/// released nor worth reviewing. Asking their version increment — as the
+/// publish used to — asked about a release that never happens, and opening
+/// their pull request sent a reviewer to an empty diff. The plan answers both
+/// at once, and its answers are stored in `<ticket>/.gg/gg-publish.json`, so
+/// `gg do publish` finds them and asks nothing again.
 ///
 /// The review does not touch the repos' dependency references: the feature
 /// branches keep their local path references. Whoever checks the branch out
@@ -47,13 +58,15 @@ class DoReviewCommand extends DirCommand<void> {
     DoPushCommand? doPushCommand,
     gg.CreatePullRequest? createPullRequest,
     TicketState? ticketState,
+    PublishPlanner? publishPlanner,
   }) : _canReviewCommand = canReviewCommand ?? CanReviewCommand(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
        _doPushCommand = doPushCommand ?? DoPushCommand(ggLog: ggLog),
        _createPullRequest =
            createPullRequest ?? gg.CreatePullRequest(ggLog: ggLog),
-       _ticketState = ticketState ?? TicketState(ggLog: ggLog) {
+       _ticketState = ticketState ?? TicketState(ggLog: ggLog),
+       _publishPlanner = publishPlanner ?? PublishPlanner(ggLog: ggLog) {
     _addArgs();
   }
 
@@ -72,6 +85,9 @@ class DoReviewCommand extends DirCommand<void> {
 
   /// Persists the `didReview` flag in `<ticketDir>/.gg.json`.
   final TicketState _ticketState;
+
+  /// Decides which repos the ticket releases and asks their publish questions.
+  final PublishPlanner _publishPlanner;
 
   @override
   Future<void> exec({
@@ -137,18 +153,29 @@ class DoReviewCommand extends DirCommand<void> {
       verbose: verbose,
     );
 
-    // Step 5: Open a pull request per repo and print its url ----------------
+    // Step 5: Plan the release ----------------------------------------------
+    // Only now is the state the reviewer will see final: `do push` merged the
+    // main branches in and refreshed the dependencies, so only now can the
+    // skip check be trusted. The pass decides which repos the ticket releases
+    // and asks their version increment and merge message.
+    final plan = await _planRelease(
+      ticketDir: ticketDir,
+      subs: subs,
+      ggLog: ggLog,
+    );
+
+    // Step 6: Open a pull request per released repo and print its url -------
     // Everything is on the remote now, so the work can be reviewed right
     // away instead of only when it is published.
     await _createPullRequests(
       ticketDir: ticketDir,
       ticketName: ticketName,
-      subs: subs,
+      plan: plan,
       ggLog: ggLog,
       taskLog: taskLog,
     );
 
-    // Step 6: Persist the review --------------------------------------------
+    // Step 7: Persist the review --------------------------------------------
     // `gg did review` answers with this hash whether the *current* state was
     // reviewed, and `gg do publish` refuses a state that was not.
     await _ticketState.writeSuccess(
@@ -158,11 +185,79 @@ class DoReviewCommand extends DirCommand<void> {
     );
   }
 
-  /// Opens — or reuses — the pull request of every ticket repo and prints its
-  /// url, so a reviewer can be pointed at it immediately. The printed url
-  /// links directly to the **changes** of the pull request — see
+  /// Plans what the ticket releases and stores the answers for the publish.
+  ///
+  /// The configuration is read back first, so a repo that was answered in an
+  /// earlier review run is not asked again — only what is missing is. A file
+  /// still carrying the progress markers of an unfinished publish is left
+  /// exactly as it is: its answers are used, nothing is asked and nothing is
+  /// written, because overwriting it would strand the `--continue` that is
+  /// supposed to finish that run.
+  ///
+  /// Nothing here may fail the review: the push already succeeded, and a
+  /// plan that cannot be made is one the publish makes later.
+  Future<PublishPlan> _planRelease({
+    required Directory ticketDir,
+    required List<Node> subs,
+    required GgLog ggLog,
+  }) async {
+    final file = publishConfigFileFor(ticketDir);
+    gg.PublishConfig? existing;
+    if (file.existsSync()) {
+      try {
+        existing = gg.PublishConfig.load(
+          configArg: file.path,
+          fallbackDir: ticketDir.path,
+        );
+      } catch (e) {
+        ggLog(cWarn('⚠️ Ignoring ${file.path}: ${_reason(e)}'));
+      }
+    }
+
+    final unfinishedPublish =
+        existing?.repos.values.any((r) => r.status != null) ?? false;
+    if (unfinishedPublish) {
+      ggLog(
+        cWarn(
+          '⚠️ An unfinished publish is in progress — leaving ${file.path} '
+          'untouched. Finish it with "gg do publish --continue".',
+        ),
+      );
+    }
+
+    final plan = await _publishPlanner.plan(
+      ticketDir: ticketDir,
+      subs: subs,
+      ggLog: ggLog,
+      config: existing,
+      // A review is not a release: it never forces one, and it never fails
+      // for a question a headless run cannot answer — `do publish` asks it.
+      ask: !unfinishedPublish,
+      requireAnswers: false,
+      wording: PublishPlanWording.review,
+    );
+
+    if (!unfinishedPublish && plan.anyPublishes) {
+      await plan.config.save(file: file);
+    }
+
+    return plan;
+  }
+
+  /// Opens — or reuses — the pull request of every repo the ticket **releases**
+  /// and prints its url, so a reviewer can be pointed at it immediately. The
+  /// printed url links directly to the **changes** of the pull request — see
   /// [_changesUrl] — because looking at the diff is what a review starts
   /// with.
+  ///
+  /// A repo the plan leaves unpublished gets **no pull request**: it carries
+  /// no change of its own — it is in the ticket because it sits between two
+  /// changed packages — so a reviewer would land on an empty diff.
+  ///
+  /// The title is the repo's merge message, the very text that will describe
+  /// the change when it lands; the ticket description and finally the ticket
+  /// name stand in when the plan has none. An already open pull request keeps
+  /// the title it has.
   ///
   /// The pull requests are created **without** the auto-merge flag: the
   /// ticket is under review, not ready to land. `gg do publish` reuses them
@@ -174,14 +269,25 @@ class DoReviewCommand extends DirCommand<void> {
   Future<void> _createPullRequests({
     required Directory ticketDir,
     required String ticketName,
-    required List<Node> subs,
+    required PublishPlan plan,
     required GgLog ggLog,
     required GgLog taskLog,
   }) async {
     // The ticket description is what the ticket is about, so it is the
-    // natural pull-request title — the same default `do commit` uses for its
+    // fallback pull-request title — the same default `do commit` uses for its
     // commit message. Without one the ticket (and branch) name is left.
-    final message = readTicketDescription(ticketDir) ?? ticketName;
+    final fallbackMessage = readTicketDescription(ticketDir) ?? ticketName;
+
+    final released = plan.entries.where((entry) => entry.publishes).toList();
+    if (released.isEmpty) {
+      ggLog(
+        cDetail(
+          '\nNo pull requests — the ticket releases nothing. Every repo is '
+          'already published.',
+        ),
+      );
+      return;
+    }
 
     final urls = <String, String>{};
     final failures = <String, String>{};
@@ -193,20 +299,18 @@ class DoReviewCommand extends DirCommand<void> {
       ggLog: ggLog,
       dark: true,
     ).run(() async {
-      for (final repo in subs) {
-        final repoDir = repo.directory;
-        final repoName = path.basename(repoDir.path);
+      for (final entry in released) {
         try {
           final url = await _createPullRequest.get(
-            directory: repoDir,
+            directory: entry.directory,
             ggLog: taskLog,
-            message: message,
+            message: entry.mergeMessage ?? fallbackMessage,
           );
           if (url != null) {
-            urls[repoName] = _changesUrl(url);
+            urls[entry.name] = _changesUrl(url);
           }
         } catch (e) {
-          failures[repoName] = _reason(e);
+          failures[entry.name] = _reason(e);
         }
       }
     });

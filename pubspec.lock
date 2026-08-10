@@ -269,18 +269,18 @@ packages:
     dependency: "direct main"
     description:
       name: gg_multi_core
-      sha256: "49591776c2ebd740f9efe633d8f9a92b5b1ab25821fccc321dcf77b634aab4b5"
+      sha256: "0f75ecfe806799f92252ca0c5bafa972df80e513feb7d4039d80c1e9333f9276"
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.1"
+    version: "2.3.0"
   gg_one:
     dependency: "direct main"
     description:
       name: gg_one
-      sha256: "27577cabce5f21d52aeb995289e912d9a63fd585e4040d03b6ec63f9d8a5843a"
+      sha256: "5cc1d6b77fa7541c381a3c675a4a9d515f494ffe7cdebaf577175254e4d88b1c"
       url: "https://pub.dev"
     source: hosted
-    version: "14.1.0"
+    version: "14.1.1"
   gg_one_commit:
     dependency: transitive
     description:
@@ -309,10 +309,10 @@ packages:
     dependency: transitive
     description:
       name: gg_one_merge
-      sha256: "5129b88ab87e8f70bd712f85b81bfe8bae3483a03fed9b4fc743f6b4cb558451"
+      sha256: "70be21cf07ba8a017b1bb93bb7acc3be6553eae145edfe5357aa434016d8cc48"
       url: "https://pub.dev"
     source: hosted
-    version: "2.3.0"
+    version: "2.3.1"
   gg_process:
     dependency: transitive
     description:
@@ -522,7 +522,7 @@ packages:
     source: hosted
     version: "1.5.2"
   pub_semver:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: pub_semver
       sha256: "5bfcf68ca79ef689f8990d1160781b4bad40a3bd5e5218ad4076ddb7f4081585"
