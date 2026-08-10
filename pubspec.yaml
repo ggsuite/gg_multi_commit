@@ -10,13 +10,13 @@ dependencies:
   gg_args: ^3.0.0
   gg_changelog: ^2.0.0
   gg_console_colors: ^2.3.0
-  gg_git: ^4.1.0
+  gg_git: ^4.1.1
   gg_lang: ^0.5.0
   gg_local_package_dependencies: ^3.0.0
   gg_log: ^1.0.6
-  gg_multi_core: ^2.3.0
+  gg_multi_core: ^2.3.1
   gg_one: ^14.1.1
-  gg_publish: ^4.3.0
+  gg_publish: ^4.3.1
   gg_status_printer: ^1.4.2
   path: ^1.9.1
   pub_semver: ^2.2.0
