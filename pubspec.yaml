@@ -1,6 +1,6 @@
 name: gg_multi_commit
 description: "Daily ticket flows of the gg_multi tool family - committing, pushing, reviewing and upgrading dependencies across all repos of a ticket in dependency order."
-version: 2.2.0
+version: 2.2.1
 repository: https://github.com/ggsuite/gg_multi_commit.git
 
 environment:
