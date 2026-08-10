@@ -116,7 +116,7 @@ class CanReviewCommand extends DirCommand<void> {
           subs: subs,
           key: stateKey,
         )) {
-      ggLog('✓ All repos can be reviewed');
+      ggLog('\nAll repos can be reviewed\n');
       return;
     }
 
@@ -155,7 +155,7 @@ class CanReviewCommand extends DirCommand<void> {
     }
 
     // All successful
-    ggLog('✓ All repos can be reviewed');
+    ggLog('\nAll repos can be reviewed\n');
   }
 
   /// Checks that all repos are on a feature branch.

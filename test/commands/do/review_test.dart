@@ -15,7 +15,8 @@ import 'package:gg_multi_commit/src/commands/did/review.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
 import 'package:gg_multi_commit/src/commands/do/review.dart';
 import 'package:gg_one/gg_one.dart' as gg;
-import 'package:gg_publish/gg_publish.dart' show PublishedVersion;
+import 'package:gg_publish/gg_publish.dart'
+    show PublishedVersion, VersionIncrement;
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
@@ -47,6 +48,7 @@ class _StubAdapter implements gg.InteractAdapter {
   Future<int> choose({
     required String message,
     required List<String> options,
+    int initialIndex = 0,
   }) async => index;
 }
 
@@ -392,6 +394,7 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
+          body: any(named: 'body'),
         ),
       );
       verifyNever(
@@ -620,8 +623,14 @@ void main() {
   });
 
   group('DoReviewCommand release plan', () {
-    /// The publish configuration `do review` writes for the ticket.
-    File configFile() => publishConfigFileFor(ticketDir);
+    /// The publish configuration `do review` writes for one repository.
+    File configFile(String repo) =>
+        gg.repoPublishConfigFile(Directory(path.join(ticketDir.path, repo)));
+
+    /// The answers `do review` recorded for [repo].
+    gg.RepoPublishConfig configOf(String repo) => gg.RepoPublishConfig.tryLoad(
+      Directory(path.join(ticketDir.path, repo)),
+    )!;
 
     test('opens no pull request for a repo that is not released', () async {
       // B only sits between two changed packages: it carries no change of
@@ -636,6 +645,7 @@ void main() {
           directory: captureAny(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
+          body: any(named: 'body'),
         ),
       ).captured.map((d) => path.basename((d as Directory).path)).toList();
       expect(opened, ['A']);
@@ -667,13 +677,12 @@ void main() {
       // Exactly one question round — for A.
       expect(seeds, hasLength(1));
 
-      final config = gg.PublishConfig.load(
-        configArg: configFile().path,
-        fallbackDir: ticketDir.path,
-      );
-      expect(config.repos['A']!.versionIncrement, 'patch');
-      expect(config.repos['A']!.mergeMessage, 'answered');
-      expect(config.repos, isNot(contains('B')));
+      expect(configOf('A').versionIncrement, VersionIncrement.patch);
+      expect(configOf('A').mergeMessage, 'answered');
+      // B gets a file too — it is where the AI records B's commits — but the
+      // questions were never asked for it, so it holds no answers.
+      expect(configOf('B').mergeMessage, isNull);
+      expect(configOf('B').versionIncrement, isNull);
     });
 
     test('the merge message becomes the pull request title', () async {
@@ -686,42 +695,54 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: 'Fix the login flow',
+          body: any(named: 'body'),
         ),
       ).called(1);
     });
 
-    test('asks only what an earlier review left unanswered', () async {
-      // A was answered by the previous run; only B is asked about again.
+    test('asks again, pre-filled with what an earlier review '
+        'recorded', () async {
       Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
-      configFile()
-        ..createSync(recursive: true)
-        ..writeAsStringSync(
-          jsonEncode({
-            'repos': {
-              'A': {'version_increment': 'major', 'merge_message': 'kept'},
-            },
-          }),
-        );
+      await gg.RepoPublishConfig(
+        versionIncrement: VersionIncrement.major,
+        mergeMessage: 'kept',
+      ).save(file: configFile('A'));
 
-      final asked = <String>[];
+      final seeds = <String>[];
       final bed = makeCommand(
         repos: ['A', 'B'],
-        editMessage: (_) async {
-          asked.add('asked');
-          return 'fresh';
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial.isEmpty ? 'fresh' : initial;
         },
       );
 
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
-      expect(asked, hasLength(1));
-      final config = gg.PublishConfig.load(
-        configArg: configFile().path,
-        fallbackDir: ticketDir.path,
-      );
-      expect(config.repos['A']!.versionIncrement, 'major');
-      expect(config.repos['A']!.mergeMessage, 'kept');
-      expect(config.repos['B']!.mergeMessage, 'fresh');
+      // Both repos are asked — A's editor pre-filled with its recorded
+      // answer, B's with nothing.
+      expect(seeds, ['kept', '']);
+      expect(configOf('A').mergeMessage, 'kept');
+      expect(configOf('B').mergeMessage, 'fresh');
+    });
+
+    test('carries the recorded commits into the pull request body', () async {
+      await gg.RepoPublishConfig(
+        commits: [gg.CommitMessage(firstLine: 'Add tracking')],
+      ).save(file: configFile('A'));
+
+      final bed = makeCommand(editMessage: (_) async => 'Title');
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Title',
+          body: '- Add tracking',
+        ),
+      ).called(1);
     });
 
     test('writes no configuration when nothing is released', () async {
@@ -729,12 +750,13 @@ void main() {
 
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
-      expect(configFile().existsSync(), isFalse);
+      expect(configFile('A').existsSync(), isFalse);
       verifyNever(
         () => bed.createPullRequest.get(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
+          body: any(named: 'body'),
         ),
       );
       expect(
@@ -752,20 +774,16 @@ void main() {
     });
 
     test('leaves the config of an unfinished publish untouched', () async {
-      // A `--continue` is waiting to finish that run; rewriting its progress
-      // markers would strand it.
-      final before = jsonEncode({
-        'repos': {
-          'A': {
-            'version_increment': 'patch',
-            'merge_message': 'from the publish',
-            'status': 'published',
-          },
-        },
-      });
-      configFile()
-        ..createSync(recursive: true)
-        ..writeAsStringSync(before);
+      // A `--continue` is waiting to finish that run; rewriting its answers
+      // would strand it.
+      await gg.RepoPublishConfig(
+        versionIncrement: VersionIncrement.patch,
+        mergeMessage: 'from the publish',
+      ).save(file: configFile('A'));
+      final before = configFile('A').readAsStringSync();
+      await gg.PublishState(status: 'published').save(
+        file: gg.publishStateFile(Directory(path.join(ticketDir.path, 'A'))),
+      );
 
       final asked = <String>[];
       final bed = makeCommand(
@@ -778,29 +796,37 @@ void main() {
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
       expect(asked, isEmpty);
-      expect(configFile().readAsStringSync(), before);
+      expect(configFile('A').readAsStringSync(), before);
       expect(
         messages.any((m) => m.contains('An unfinished publish is in progress')),
         isTrue,
       );
     });
 
-    test('ignores an unreadable configuration', () async {
-      configFile()
+    test('reads the answers of a legacy ticket-level config', () async {
+      legacyTicketPublishConfigFile(ticketDir)
         ..createSync(recursive: true)
-        ..writeAsStringSync('{ not json');
+        ..writeAsStringSync(
+          jsonEncode({
+            'repos': {
+              'A': {'version_increment': 'major', 'merge_message': 'legacy'},
+            },
+          }),
+        );
 
-      final bed = makeCommand();
+      final seeds = <String>[];
+      final bed = makeCommand(
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial;
+        },
+      );
 
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
-      expect(messages.any((m) => m.contains('Ignoring')), isTrue);
-      // The review carries on and writes a fresh configuration.
-      final config = gg.PublishConfig.load(
-        configArg: configFile().path,
-        fallbackDir: ticketDir.path,
-      );
-      expect(config.repos['A']!.versionIncrement, 'patch');
+      expect(seeds, ['legacy']);
+      // Only the new per-repo file is written from now on.
+      expect(configOf('A').mergeMessage, 'legacy');
     });
 
     test('never fails the review when no question can be answered', () async {
@@ -815,6 +841,7 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           message: any(named: 'message'),
+          body: any(named: 'body'),
         ),
       ).called(1);
       verify(

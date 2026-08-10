@@ -96,10 +96,27 @@ class DoCommitCommand extends DirCommand<void> {
       return;
     }
 
+    // A repo whose publish_config.json proposes its own message is asked
+    // separately; everything else shares the one message the ticket resolves
+    // once. Without that split a ticket that never used the file would open
+    // one editor per repo.
+    final proposals = <String, gg.CommitMessage>{};
+    for (final node in nodes) {
+      final proposal = loadTicketRepoPublishFiles(
+        repoDir: node.directory,
+        ticketDir: ticketDir,
+      ).config.nextCommitMessage;
+      if (proposal != null) {
+        proposals[path.basename(node.directory.path)] = proposal;
+      }
+    }
+
     // Without an explicit -m the ticket description becomes the commit
     // message — offered in the same editor `do publish` uses for its merge
     // messages, so it can be adjusted before it is applied to every repo.
-    message = await _resolveMessage(message: message, ticketDir: ticketDir);
+    final shared = proposals.length == nodes.length
+        ? null
+        : await _resolveMessage(message: message, ticketDir: ticketDir);
 
     // Iterate over each repository and perform the commit
     final failedRepos = <String>[];
@@ -107,11 +124,20 @@ class DoCommitCommand extends DirCommand<void> {
       final repoDir = node.directory;
       final repoName = path.basename(repoDir.path);
       ggLog('\n${cH1(repoName)}');
+      final proposal = proposals[repoName];
+      gg.CommitMessage? resolved;
       try {
+        resolved = proposal == null
+            ? null
+            : await _resolveMessageFor(
+                message: message,
+                proposal: proposal,
+                ggLog: ggLog,
+              );
         await _ggDoCommit.exec(
           directory: repoDir,
           ggLog: ggLog,
-          message: message,
+          message: resolved?.text ?? shared,
           logType: logType,
           updateChangeLog: updateChangeLog,
           force: false,
@@ -121,6 +147,21 @@ class DoCommitCommand extends DirCommand<void> {
           [cDetail('✗ Failed to commit'), cError(rmControls('$e'))].join('\n'),
         );
         failedRepos.add(repoName);
+        continue;
+      }
+
+      // Only a commit that actually happened is recorded — a failed one must
+      // not enter the history the pull-request description is built from.
+      // `nextCommitMessage` stays: it is the standing proposal the AI keeps
+      // up to date, not a buffer that committing empties.
+      if (resolved != null) {
+        final files = loadTicketRepoPublishFiles(
+          repoDir: repoDir,
+          ticketDir: ticketDir,
+        );
+        await files.config
+            .withCommitted(resolved)
+            .save(file: gg.repoPublishConfigFile(repoDir));
       }
     }
 
@@ -159,6 +200,55 @@ class DoCommitCommand extends DirCommand<void> {
     final resolved = edited.isEmpty ? description : edited;
     return resolved.isEmpty ? null : resolved;
   }
+
+  /// Returns the commit message of a repository whose `publish_config.json`
+  /// carries a [proposal].
+  ///
+  /// An explicit [message] (`-m`) wins and is validated like any other; the
+  /// proposal otherwise pre-fills the editor. The first line must stay within
+  /// [gg.maxCommitMessageFirstLineLength] characters — a violation re-opens
+  /// the editor with what was typed, so the rule is a correction rather than
+  /// a lost message. A run nobody can correct (no terminal, `-m`) reports the
+  /// violation instead of looping.
+  Future<gg.CommitMessage> _resolveMessageFor({
+    required String? message,
+    required gg.CommitMessage proposal,
+    required GgLog ggLog,
+  }) async {
+    final explicit = message?.trim();
+    if (explicit != null && explicit.isNotEmpty) {
+      final parsed = gg.CommitMessage.parse(explicit);
+      final error = gg.CommitMessage.validationError(parsed.firstLine);
+      if (error != null) {
+        throw Exception(cError('Invalid commit message: $error'));
+      }
+      return parsed;
+    }
+
+    var seed = proposal.text;
+    for (var attempt = 0; attempt < _maxMessageAttempts; attempt++) {
+      final edited = (await _editMessage(seed) ?? '').trim();
+      final parsed = gg.CommitMessage.parse(
+        edited.isEmpty ? proposal.text : edited,
+      );
+      final error = gg.CommitMessage.validationError(parsed.firstLine);
+      if (error == null) {
+        return parsed;
+      }
+      ggLog(cError('✗ $error'));
+      seed = edited;
+    }
+    throw Exception(
+      cError(
+        'The commit message is still invalid after $_maxMessageAttempts '
+        'attempts.',
+      ),
+    );
+  }
+
+  /// How often the editor re-opens on an invalid message before giving up —
+  /// enough for a correction, few enough that a piped stdin cannot spin.
+  static const int _maxMessageAttempts = 3;
 
   /// Opens the shared message editor for the commit message.
   // coverage:ignore-start
