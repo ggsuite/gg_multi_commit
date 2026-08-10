@@ -301,7 +301,7 @@ packages:
       path: "../gg_one_do_publish"
       relative: true
     source: path
-    version: "2.4.2"
+    version: "2.4.3"
   gg_one_merge:
     dependency: transitive
     description:
