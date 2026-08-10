@@ -4,6 +4,7 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'package:gg_git/gg_git.dart';
 import 'dart:io';
 
 import 'package:gg_args/gg_args.dart';
@@ -65,6 +66,7 @@ class CanReviewCommand extends DirCommand<void> {
     bool? verbose,
     bool? force,
     bool? saveState,
+    Map<String, dynamic> options = const {},
   }) => get(
     directory: directory,
     ggLog: ggLog,

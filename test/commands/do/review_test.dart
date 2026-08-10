@@ -15,9 +15,11 @@ import 'package:gg_multi_commit/src/commands/did/review.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
 import 'package:gg_multi_commit/src/commands/do/review.dart';
 import 'package:gg_one/gg_one.dart' as gg;
+import 'package:gg_publish/gg_publish.dart' show PublishedVersion;
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
+import 'package:pub_semver/pub_semver.dart';
 import 'package:pubspec_parse/pubspec_parse.dart';
 import 'package:test/test.dart';
 
@@ -29,7 +31,24 @@ class MockDoPushCommand extends Mock implements DoPushCommand {}
 
 class MockCreatePullRequest extends Mock implements gg.CreatePullRequest {}
 
+class MockPublishedVersion extends Mock implements PublishedVersion {}
+
 class FakeDirectory extends Fake implements Directory {}
+
+class FakeNode extends Fake implements Node {}
+
+/// A deterministic [gg.InteractAdapter] that always picks [index].
+class _StubAdapter implements gg.InteractAdapter {
+  _StubAdapter(this.index);
+
+  final int index;
+
+  @override
+  Future<int> choose({
+    required String message,
+    required List<String> options,
+  }) async => index;
+}
 
 /// A [MockCreatePullRequest] that answers every repo with [url] — null when
 /// the repo has no provider gg can open a pull request on.
@@ -55,6 +74,7 @@ typedef ReviewTestBed = ({
   MockDoPushCommand doPush,
   MockCreatePullRequest createPullRequest,
   MockTicketState ticketState,
+  MockPublishSkipCheck skipCheck,
 });
 
 void main() {
@@ -65,7 +85,9 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(FakeDirectory());
+    registerFallbackValue(FakeNode());
     registerFallbackValue(<Node>[]);
+    registerFallbackValue(<String, String>{});
   });
 
   void ggLog(String msg) => messages.add(rmControls(msg));
@@ -86,8 +108,15 @@ void main() {
   });
 
   /// Builds a [DoReviewCommand] whose collaborators all succeed for the
-  /// single ticket repo A.
-  ReviewTestBed makeCommand({MockCreatePullRequest? createPullRequest}) {
+  /// ticket repos [repos] — every one of which the ticket releases, unless
+  /// it is named in [skipped].
+  ReviewTestBed makeCommand({
+    MockCreatePullRequest? createPullRequest,
+    List<String> repos = const ['A'],
+    Set<String> skipped = const <String>{},
+    EditMessage? editMessage,
+    bool hasTerminal = true,
+  }) {
     final canReview = MockCanReviewCommand();
     when(
       () => canReview.exec(
@@ -122,13 +151,41 @@ void main() {
       ),
     ).thenAnswer(
       (_) async => [
-        Node(
-          name: 'A',
-          directory: Directory(path.join(ticketDir.path, 'A')),
-          manifest: DartPackageManifest(pubspec: Pubspec('A')),
-        ),
+        for (final name in repos)
+          Node(
+            name: name,
+            directory: Directory(path.join(ticketDir.path, name)),
+            manifest: DartPackageManifest(pubspec: Pubspec(name)),
+          ),
       ],
     );
+
+    final skipCheck = MockPublishSkipCheck();
+    when(
+      () => skipCheck.get(
+        repo: any(named: 'repo'),
+        refVersions: any(named: 'refVersions'),
+      ),
+    ).thenAnswer((invocation) async {
+      final repo = invocation.namedArguments[#repo] as Node;
+      return skipped.contains(repo.name)
+          ? const PublishSkipDecision(
+              skip: true,
+              reason: 'Nothing changed. Skip publishing.',
+            )
+          : const PublishSkipDecision(
+              skip: false,
+              reason: 'the repo contains the manual commit »Fix bug«',
+            );
+    });
+
+    final publishedVersion = MockPublishedVersion();
+    when(
+      () => publishedVersion.get(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+      ),
+    ).thenAnswer((_) async => Version(1, 0, 0));
 
     final pullRequest = createPullRequest ?? stubCreatePullRequest();
 
@@ -139,6 +196,15 @@ void main() {
       doPushCommand: doPush,
       createPullRequest: pullRequest,
       ticketState: ticketState,
+      publishPlanner: PublishPlanner(
+        ggLog: ggLog,
+        publishSkipCheck: skipCheck,
+        publishedVersion: publishedVersion,
+        readManifestVersion: (_) async => '1.0.0',
+        versionSelector: gg.VersionSelector(adapter: _StubAdapter(0)),
+        editMessage: editMessage ?? (initial) async => initial,
+        hasTerminal: () => hasTerminal,
+      ),
     );
 
     return (
@@ -147,6 +213,7 @@ void main() {
       doPush: doPush,
       createPullRequest: pullRequest,
       ticketState: ticketState,
+      skipCheck: skipCheck,
     );
   }
 
@@ -169,7 +236,7 @@ void main() {
       );
       expect(messages, [
         '\n'
-            'Reviewing ...',
+            'Prepare review',
         'Please run this command inside a ticket folder.',
       ]);
     });
@@ -239,9 +306,12 @@ void main() {
       ]);
 
       expect(messages, [
-        '\nReviewing ...',
+        '\nPrepare review',
         '⌛️ Can review?',
         '✓ Can review?',
+        // The planning pass announces the repo it asks the publish
+        // questions for.
+        '\nA',
         '⌛️ Creating pull requests',
         '✓ Creating pull requests',
         '\n✓ Please open and review:',
@@ -401,7 +471,7 @@ void main() {
 
   group('DoReviewCommand pull requests', () {
     test('use the ticket description as message', () async {
-      File(path.join(ticketDir.path, '.ticket')).writeAsStringSync(
+      File(path.join(ticketDir.path, ticketJsonFileName)).writeAsStringSync(
         jsonEncode(<String, String>{
           'issue_id': 'TICKDR',
           'description': 'Create pull requests while reviewing',
@@ -420,8 +490,27 @@ void main() {
       ).called(1);
     });
 
-    test('fall back to the ticket name without a description', () async {
+    test('use the generic merge message when the ticket has no '
+        'description', () async {
+      // Nothing seeds the merge message, so the plan falls back to the
+      // generic »Publish <repo>« — and that is the pull request's title.
       final bed = makeCommand();
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Publish A',
+        ),
+      ).called(1);
+    });
+
+    test('fall back to the ticket name when the plan has no message', () async {
+      // A headless review asks nothing, so no merge message exists yet — the
+      // ticket description, else the ticket name, titles the pull request.
+      final bed = makeCommand(hasTerminal: false);
 
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
@@ -520,6 +609,214 @@ void main() {
       );
       // The review itself succeeded — the branch is on the remote — so the
       // review is still recorded.
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
+    });
+  });
+
+  group('DoReviewCommand release plan', () {
+    /// The publish configuration `do review` writes for the ticket.
+    File configFile() => publishConfigFileFor(ticketDir);
+
+    test('opens no pull request for a repo that is not released', () async {
+      // B only sits between two changed packages: it carries no change of
+      // its own, so it is neither released nor worth a reviewer's time.
+      Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
+      final bed = makeCommand(repos: ['A', 'B'], skipped: {'B'});
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      final opened = verify(
+        () => bed.createPullRequest.get(
+          directory: captureAny(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+        ),
+      ).captured.map((d) => path.basename((d as Directory).path)).toList();
+      expect(opened, ['A']);
+
+      // And the user is told why B was left out.
+      expect(
+        messages.any(
+          (m) =>
+              m.contains('Not published — no pull request.') &&
+              m.contains('Nothing changed.'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('asks the publish questions only for the released repos', () async {
+      final seeds = <String>[];
+      final bed = makeCommand(
+        repos: ['A', 'B'],
+        skipped: {'B'},
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return 'answered';
+        },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      // Exactly one question round — for A.
+      expect(seeds, hasLength(1));
+
+      final config = gg.PublishConfig.load(
+        configArg: configFile().path,
+        fallbackDir: ticketDir.path,
+      );
+      expect(config.repos['A']!.versionIncrement, 'patch');
+      expect(config.repos['A']!.mergeMessage, 'answered');
+      expect(config.repos, isNot(contains('B')));
+    });
+
+    test('the merge message becomes the pull request title', () async {
+      final bed = makeCommand(editMessage: (_) async => 'Fix the login flow');
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Fix the login flow',
+        ),
+      ).called(1);
+    });
+
+    test('asks only what an earlier review left unanswered', () async {
+      // A was answered by the previous run; only B is asked about again.
+      Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
+      configFile()
+        ..createSync(recursive: true)
+        ..writeAsStringSync(
+          jsonEncode({
+            'repos': {
+              'A': {'version_increment': 'major', 'merge_message': 'kept'},
+            },
+          }),
+        );
+
+      final asked = <String>[];
+      final bed = makeCommand(
+        repos: ['A', 'B'],
+        editMessage: (_) async {
+          asked.add('asked');
+          return 'fresh';
+        },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(asked, hasLength(1));
+      final config = gg.PublishConfig.load(
+        configArg: configFile().path,
+        fallbackDir: ticketDir.path,
+      );
+      expect(config.repos['A']!.versionIncrement, 'major');
+      expect(config.repos['A']!.mergeMessage, 'kept');
+      expect(config.repos['B']!.mergeMessage, 'fresh');
+    });
+
+    test('writes no configuration when nothing is released', () async {
+      final bed = makeCommand(skipped: {'A'});
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(configFile().existsSync(), isFalse);
+      verifyNever(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+        ),
+      );
+      expect(
+        messages.any((m) => m.contains('the ticket releases nothing')),
+        isTrue,
+      );
+      // The review is still recorded — the state was pushed and looked at.
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
+    });
+
+    test('leaves the config of an unfinished publish untouched', () async {
+      // A `--continue` is waiting to finish that run; rewriting its progress
+      // markers would strand it.
+      final before = jsonEncode({
+        'repos': {
+          'A': {
+            'version_increment': 'patch',
+            'merge_message': 'from the publish',
+            'status': 'published',
+          },
+        },
+      });
+      configFile()
+        ..createSync(recursive: true)
+        ..writeAsStringSync(before);
+
+      final asked = <String>[];
+      final bed = makeCommand(
+        editMessage: (initial) async {
+          asked.add(initial);
+          return initial;
+        },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(asked, isEmpty);
+      expect(configFile().readAsStringSync(), before);
+      expect(
+        messages.any((m) => m.contains('An unfinished publish is in progress')),
+        isTrue,
+      );
+    });
+
+    test('ignores an unreadable configuration', () async {
+      configFile()
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{ not json');
+
+      final bed = makeCommand();
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(messages.any((m) => m.contains('Ignoring')), isTrue);
+      // The review carries on and writes a fresh configuration.
+      final config = gg.PublishConfig.load(
+        configArg: configFile().path,
+        fallbackDir: ticketDir.path,
+      );
+      expect(config.repos['A']!.versionIncrement, 'patch');
+    });
+
+    test('never fails the review when no question can be answered', () async {
+      // stdin is no terminal: `gg do publish` will ask instead — the review
+      // still filters the pull requests and records itself.
+      final bed = makeCommand(hasTerminal: false);
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+        ),
+      ).called(1);
       verify(
         () => bed.ticketState.writeSuccess(
           ticketDir: any(named: 'ticketDir'),
