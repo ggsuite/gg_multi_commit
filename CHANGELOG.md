@@ -6,6 +6,11 @@
 
 - `do commit` proposes a repository's own `nextCommitMessage`, enforces the 60-character first line and records the commit in that repository's `commits`
 - `do review` stores the answers per repository and passes the recorded commits as the pull-request description
+## 3.0.1 - 2026-08-10
+
+### Changed
+
+- Make sure »dart pub upgrade --tighten --major-versions« is called before publishing
 
 ## 3.0.0 - 2026-08-10
 
