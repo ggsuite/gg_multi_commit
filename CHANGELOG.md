@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Don't review skipped packages
+
 ## 2.2.0 - 2026-08-09
 
 ### Changed
