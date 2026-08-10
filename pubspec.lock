@@ -268,10 +268,11 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      path: "../gg_multi_core"
-      relative: true
-    source: path
-    version: "2.3.1"
+      name: gg_multi_core
+      sha256: "908da430a99b69ddf85422e5fbf53f544c617929808eda13947f3536cfae1d61"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   gg_one:
     dependency: "direct main"
     description:
