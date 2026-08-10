@@ -40,8 +40,10 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 /// released nor worth reviewing. Asking their version increment — as the
 /// publish used to — asked about a release that never happens, and opening
 /// their pull request sent a reviewer to an empty diff. The plan answers both
-/// at once, and its answers are stored in `<ticket>/.gg/gg-publish.json`, so
-/// `gg do publish` finds them and asks nothing again.
+/// at once, and its answers are stored in each repository's own
+/// `<repo>/.gg/publish_config.json`, so `gg do publish` finds them and asks
+/// nothing again. Re-running the review IS how an answer is corrected: it
+/// asks every question afresh, with the recorded one pre-selected.
 ///
 /// The review does not touch the repos' dependency references: the feature
 /// branches keep their local path references. Whoever checks the branch out
@@ -220,6 +222,9 @@ class DoReviewCommand extends DirCommand<void> {
       ticketDir: ticketDir,
       subs: subs,
       ggLog: ggLog,
+      // Re-running a review IS how an answer is corrected, so every
+      // question is asked again with the recorded one pre-selected.
+      reconfigure: true,
       // A review is not a release: it never forces one, and it never fails
       // for a question a headless run cannot answer — `do publish` asks it.
       ask: !unfinishedPublish,
