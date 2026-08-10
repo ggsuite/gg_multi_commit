@@ -559,7 +559,7 @@ class DoPushCommand extends DirCommand<void> {
 
     // Summarize the results ----------------------------------------------
     if (failedRepos.isEmpty) {
-      ggLog(cDetail('\n✓ All repos pushed\n'));
+      ggLog('\nAll repos pushed\n');
       return;
     } else {
       ggLog(cAction('\nPlease fix the issues above.\n'));

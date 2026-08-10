@@ -99,13 +99,13 @@ class CanCommitCommand extends DirCommand<void> {
       }
     }
 
-    // All successful
+    // All successful. Undimmed, like the summaries of `do commit` and
+    // `did commit` — this is the answer the user ran the command for, not
+    // context around it.
     ggLog(
-      cDetail(
-        allCommitted
-            ? '\nAll repos committed.\n'
-            : '\nAll repos can be committed\n',
-      ),
+      allCommitted
+          ? '\nAll repos committed\n'
+          : '\nAll repos can be committed\n',
     );
   }
 }

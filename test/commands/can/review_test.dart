@@ -174,7 +174,7 @@ void main() {
           ),
         );
       await runner.run(['review', '--input', ticketDir.path]);
-      expect(messages, contains('✓ All repos can be reviewed'));
+      expect(messages, contains('\nAll repos can be reviewed\n'));
       verify(
         () => mockIsFeatureBranch.get(
           directory: any(named: 'directory'),
@@ -243,7 +243,7 @@ void main() {
           ggLog: any(named: 'ggLog'),
         ),
       ).called(2);
-      expect(messages, contains('✓ All repos can be reviewed'));
+      expect(messages, contains('\nAll repos can be reviewed\n'));
     });
 
     test('runs "dart pub get --offline" for bridge repos too '
@@ -321,7 +321,7 @@ void main() {
           ggLog: any(named: 'ggLog'),
         ),
       ).called(2);
-      expect(messages, contains('✓ All repos can be reviewed'));
+      expect(messages, contains('\nAll repos can be reviewed\n'));
     });
 
     test('fails if "dart pub get --offline" fails in a repo', () async {
@@ -682,7 +682,7 @@ void main() {
 
         await runner.run(['review', '--input', ticketDir.path]);
 
-        expect(messages, contains('✓ All repos can be reviewed'));
+        expect(messages, contains('\nAll repos can be reviewed\n'));
         verifyNever(
           () => mockIsFeatureBranch.get(
             directory: any(named: 'directory'),
@@ -889,7 +889,7 @@ void main() {
 
       await command.get(directory: ticketDir, ggLog: localLog, verbose: false);
 
-      expect(localMessages.last, contains('✓ All repos can be reviewed'));
+      expect(localMessages.last, contains('\nAll repos can be reviewed\n'));
     });
   });
 }

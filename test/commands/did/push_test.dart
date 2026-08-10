@@ -153,7 +153,7 @@ void main() {
             'A',
         '\n'
             'B',
-        '✓ All repos pushed',
+        '\nAll repos pushed\n',
       ]);
     });
 

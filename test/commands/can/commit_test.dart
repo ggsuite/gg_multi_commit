@@ -140,7 +140,7 @@ void main() {
           ),
         );
       await runner.run(['commit', '--input', ticketDir.path]);
-      expect(messages.last, '\nAll repos committed.\n');
+      expect(messages.last, '\nAll repos committed\n');
     });
 
     test('aborts on first repo that fails', () async {
