@@ -95,7 +95,7 @@ class DidPushCommand extends DirCommand<void> {
       }
     }
 
-    ggLog(cH2('\nAll repos pushed\n'));
+    ggLog('\nAll repos pushed\n');
   }
 }
 
