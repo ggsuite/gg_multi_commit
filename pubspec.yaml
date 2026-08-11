@@ -13,7 +13,7 @@ dependencies:
   gg_git: ^4.1.1
   gg_lang: ^0.5.0
   gg_local_package_dependencies: ^3.0.0
-  gg_log: ^1.0.6
+  gg_log: ^1.0.7
   gg_multi_core: ^3.1.0
   gg_one: ^14.2.0
   gg_publish: ^4.3.1
@@ -23,7 +23,7 @@ dependencies:
 
 dev_dependencies:
   args: ^2.7.0
-  gg_capture_print: ^1.0.9
+  gg_capture_print: ^1.0.10
   lints: ^6.1.0
   mocktail: ^1.0.5
   pubspec_parse: ^1.5.0
