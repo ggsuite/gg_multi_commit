@@ -252,10 +252,9 @@ packages:
   gg_local_package_dependencies:
     dependency: "direct main"
     description:
-      name: gg_local_package_dependencies
-      sha256: "65df351df62873a5562ca9b9735025f95a6e47d64952e9f6f0b933acc7aed3d3"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_local_package_dependencies"
+      relative: true
+    source: path
     version: "4.0.0"
   gg_log:
     dependency: "direct main"
@@ -276,10 +275,9 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: b26dec5c71c3c5a0d8363a5c86eae2f7d66dd493d4db215f62493c5284823132
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.0.0"
   gg_one:
     dependency: "direct main"
