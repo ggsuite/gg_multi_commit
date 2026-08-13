@@ -225,9 +225,8 @@ void main() {
     }
 
     test('reuses the ticket description when no message is given', () async {
-      File(
-        path.join(ticketDir.path, ticketJsonFileName),
-      ).writeAsStringSync('{"description": "Ticket desc"}');
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
 
       await run();
 
@@ -237,9 +236,8 @@ void main() {
     });
 
     test('commits the edited message', () async {
-      File(
-        path.join(ticketDir.path, ticketJsonFileName),
-      ).writeAsStringSync('{"description": "Ticket desc"}');
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
 
       await run(edit: editMessage('Edited message'));
 
@@ -247,9 +245,8 @@ void main() {
     });
 
     test('falls back to the description when the edit is cleared', () async {
-      File(
-        path.join(ticketDir.path, ticketJsonFileName),
-      ).writeAsStringSync('{"description": "Ticket desc"}');
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
 
       await run(edit: editMessage('   '));
 
@@ -257,9 +254,8 @@ void main() {
     });
 
     test('does not offer an edit when -m is given', () async {
-      File(
-        path.join(ticketDir.path, ticketJsonFileName),
-      ).writeAsStringSync('{"description": "Ticket desc"}');
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
 
       await run(message: '  Explicit message  ');
 
@@ -288,9 +284,8 @@ void main() {
     test('does not offer an edit when the ticket has no repos', () async {
       final emptyTicket = Directory(path.join(ticketsDir.path, 'EMPTY'))
         ..createSync();
-      File(
-        path.join(emptyTicket.path, ticketJsonFileName),
-      ).writeAsStringSync('{"description": "Ticket desc"}');
+      File(path.join(emptyTicket.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
 
       final runner = CommandRunner<void>('test', 'do commit ticket')
         ..addCommand(
@@ -358,9 +353,8 @@ void main() {
     test('proposes the per-repo message and shares the rest', () async {
       // Only A carries a proposal — B keeps the one shared ticket message.
       await proposeIn('A', firstLine: 'Adapt message.json');
-      File(
-        path.join(ticketDir.path, ticketJsonFileName),
-      ).writeAsStringSync('{"description": "Ticket desc"}');
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
 
       await run();
 

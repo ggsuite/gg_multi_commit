@@ -4,7 +4,7 @@ version: 4.0.0
 repository: https://github.com/ggsuite/gg_multi_commit.git
 
 environment:
-  sdk: ">=3.8.0 <4.0.0"
+  sdk: ">=3.13.0 <4.0.0"
 
 dependencies:
   gg_args: ^3.0.1

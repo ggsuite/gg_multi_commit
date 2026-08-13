@@ -258,12 +258,10 @@ void main() {
       final repoADir = Directory(path.join(ticketDir.path, 'A'));
       final repoBDir = Directory(path.join(ticketDir.path, 'B'));
       repoBDir.createSync(recursive: true);
-      File(
-        path.join(repoBDir.path, 'pubspec.yaml'),
-      ).writeAsStringSync('name: B\n');
-      File(
-        path.join(repoBDir.path, 'package.json'),
-      ).writeAsStringSync('{"name":"B"}');
+      File(path.join(repoBDir.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: B\n');
+      File(path.join(repoBDir.path, 'package.json'))
+          .writeAsStringSync('{"name":"B"}');
       File(path.join(repoBDir.path, 'tsconfig.json')).writeAsStringSync('{}');
 
       when(
