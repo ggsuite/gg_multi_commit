@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2025 Göran Hegenberg. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -331,9 +331,9 @@ void main() {
   group('DoPushCommand (ticket-wide)', () {
     test('fails outside any ticket folder', () async {
       await expectLater(
-        () async => await runner(
-          DoPushCommand(ggLog: ggLog),
-        ).run(['push', '--input', tempDir.path]),
+        () async =>
+            await runner(DoPushCommand(ggLog: ggLog))
+                .run(['push', '--input', tempDir.path]),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -351,18 +351,16 @@ void main() {
     test('logs when there are no repositories', () async {
       final emptyTicket = Directory(path.join(ticketsDir.path, 'EMPTY'))
         ..createSync();
-      await runner(
-        DoPushCommand(ggLog: ggLog),
-      ).run(['push', '--input', emptyTicket.path]);
+      await runner(DoPushCommand(ggLog: ggLog))
+          .run(['push', '--input', emptyTicket.path]);
       expect(messages, contains('⚠️ No repos in this ticket'));
     });
 
     test('pushes all repos successfully (verbose)', () async {
       final bed = makeCommand();
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       expect(
         messages.where((m) => m.contains('Uncommitted changes?')),
@@ -406,9 +404,9 @@ void main() {
       });
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['push', '--input', ticketDir.path, '--verbose']),
+        () async =>
+            await runner(bed.command)
+                .run(['push', '--input', ticketDir.path, '--verbose']),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -501,9 +499,8 @@ void main() {
     test('forwards --force to gg do push', () async {
       final bed = makeCommand(repos: ['A']);
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--force']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--force']);
 
       verify(
         () => bed.ggDoPush.exec(
@@ -528,9 +525,9 @@ void main() {
       });
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['push', '--input', ticketDir.path, '--verbose']),
+        () async =>
+            await runner(bed.command)
+                .run(['push', '--input', ticketDir.path, '--verbose']),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -574,9 +571,8 @@ void main() {
     test('runs "dart pub get" in every repo after the merge', () async {
       final bed = makeCommand();
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verifyInOrder([
         () => bed.git('git', [
@@ -599,9 +595,8 @@ void main() {
     });
 
     test('runs "flutter pub get" in a Flutter repo', () async {
-      File(
-        path.join(ticketDir.path, 'A', 'pubspec.yaml'),
-      ).writeAsStringSync('name: A\nflutter:\n  uses-material-design: true');
+      File(path.join(ticketDir.path, 'A', 'pubspec.yaml'))
+          .writeAsStringSync('name: A\nflutter:\n  uses-material-design: true');
       final bed = makeCommand(repos: ['A']);
       when(
         () => bed.git('flutter', [
@@ -686,9 +681,8 @@ void main() {
     test('fetches and merges main into every repo before pushing', () async {
       final bed = makeCommand();
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verifyInOrder([
         () => bed.git('git', [
@@ -750,9 +744,8 @@ void main() {
         ], workingDirectory: any(named: 'workingDirectory')),
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verify(
         () => bed.git('git', [
@@ -775,9 +768,8 @@ void main() {
         ),
       ).thenThrow(ArgumentError('Could not determine the main branch.'));
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verifyNever(
         () => bed.git('git', [
@@ -822,9 +814,9 @@ void main() {
         );
 
         await expectLater(
-          () async => await runner(
-            bed.command,
-          ).run(['push', '--input', ticketDir.path, '--verbose']),
+          () async =>
+              await runner(bed.command)
+                  .run(['push', '--input', ticketDir.path, '--verbose']),
           throwsA(
             isA<MergeConflictException>().having(
               (e) => rmControls(e.toString()),
@@ -883,9 +875,9 @@ void main() {
         ).thenAnswer((_) async => ProcessResult(0, 1, '', ''));
 
         await expectLater(
-          () async => await runner(
-            bed.command,
-          ).run(['push', '--input', ticketDir.path]),
+          () async =>
+              await runner(bed.command)
+                  .run(['push', '--input', ticketDir.path]),
           throwsA(
             isA<Exception>().having(
               (e) => rmControls(e.toString()),
@@ -977,9 +969,8 @@ void main() {
     test('forwards --no-major-versions to the upgrade', () async {
       final bed = makeCommand(repos: ['A']);
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--no-major-versions']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--no-major-versions']);
 
       verify(
         () => bed.upgradeDeps.exec(
@@ -1014,9 +1005,8 @@ void main() {
         'the push', () async {
       final bed = makeCommand(repos: ['A']);
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--no-upgrade']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--no-upgrade']);
 
       verifyNever(
         () => bed.upgradeDeps.exec(
@@ -1075,9 +1065,8 @@ void main() {
         ),
       ).thenAnswer((_) async => callCount++ == 0);
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--no-upgrade']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--no-upgrade']);
 
       verify(
         () => bed.systemCommit.commit(
@@ -1139,9 +1128,8 @@ void main() {
         ),
       ).thenAnswer((_) async => callCount++ == 0);
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--no-major-versions']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--no-major-versions']);
 
       verify(
         () => bed.systemCommit.commit(
@@ -1284,9 +1272,8 @@ void main() {
           ], workingDirectory: any(named: 'workingDirectory')),
         ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-        await runner(
-          bed.command,
-        ).run(['push', '--input', ticketDir.path, '--verbose']);
+        await runner(bed.command)
+            .run(['push', '--input', ticketDir.path, '--verbose']);
 
         verifyInOrder([
           () => bed.git('git', [
@@ -1313,9 +1300,8 @@ void main() {
       final bed = makeCommand(repos: ['A']);
       stubIntegrateProbes(bed.git, remoteContainedInHead: true);
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verifyNever(
         () => bed.git('git', [
@@ -1399,9 +1385,8 @@ void main() {
         ], workingDirectory: any(named: 'workingDirectory')),
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verify(
         () => bed.git('git', [
@@ -1448,9 +1433,8 @@ void main() {
         ], workingDirectory: any(named: 'workingDirectory')),
       ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
 
-      await runner(
-        bed.command,
-      ).run(['push', '--input', ticketDir.path, '--verbose']);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
 
       verify(
         () => bed.git('git', [
@@ -1510,9 +1494,9 @@ void main() {
       ).thenAnswer((_) async => ProcessResult(1, 1, '', 'stale info'));
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['push', '--input', ticketDir.path, '--verbose']),
+        () async =>
+            await runner(bed.command)
+                .run(['push', '--input', ticketDir.path, '--verbose']),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -1558,9 +1542,9 @@ void main() {
       ).thenAnswer((_) async => ProcessResult(0, 0, '', ''));
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['push', '--input', ticketDir.path, '--verbose']),
+        () async =>
+            await runner(bed.command)
+                .run(['push', '--input', ticketDir.path, '--verbose']),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),

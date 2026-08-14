@@ -1,5 +1,5 @@
 // @license
-// Copyright (c) 2019 - 2025 Dr. Gabriel Gatzsche. All Rights Reserved.
+// Copyright (c) ggsuite
 //
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
@@ -225,9 +225,8 @@ void main() {
   group('DoReviewCommand (ticket-wide)', () {
     test('fails outside any ticket folder', () async {
       await expectLater(
-        runner(
-          DoReviewCommand(ggLog: ggLog),
-        ).run(['review', '--input', tempDir.path]),
+        runner(DoReviewCommand(ggLog: ggLog))
+            .run(['review', '--input', tempDir.path]),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -246,9 +245,8 @@ void main() {
     test('logs when there are no repositories', () async {
       final emptyTicket = Directory(path.join(ticketsDir.path, 'EMPTY'))
         ..createSync();
-      await runner(
-        DoReviewCommand(ggLog: ggLog),
-      ).run(['review', '--input', emptyTicket.path]);
+      await runner(DoReviewCommand(ggLog: ggLog))
+          .run(['review', '--input', emptyTicket.path]);
       expect(messages, contains('⚠️ No repos in this ticket'));
     });
 
@@ -260,9 +258,8 @@ void main() {
         ),
       );
 
-      await runner(
-        bed.command,
-      ).run(['review', '--verbose', '--input', ticketDir.path]);
+      await runner(bed.command)
+          .run(['review', '--verbose', '--input', ticketDir.path]);
 
       verifyInOrder([
         () => bed.canReview.exec(
@@ -333,9 +330,9 @@ void main() {
       ).thenThrow(Exception('Uncommitted changes in A'));
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['review', '--input', ticketDir.path]),
+        () async =>
+            await runner(bed.command)
+                .run(['review', '--input', ticketDir.path]),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -377,9 +374,9 @@ void main() {
       ).thenThrow(Exception('Failed to push.'));
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['review', '--input', ticketDir.path]),
+        () async =>
+            await runner(bed.command)
+                .run(['review', '--input', ticketDir.path]),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -424,9 +421,9 @@ void main() {
       );
 
       await expectLater(
-        () async => await runner(
-          bed.command,
-        ).run(['review', '--input', ticketDir.path]),
+        () async =>
+            await runner(bed.command)
+                .run(['review', '--input', ticketDir.path]),
         throwsA(
           isA<MergeConflictException>().having(
             (e) => rmControls(e.toString()),
