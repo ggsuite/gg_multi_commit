@@ -29,7 +29,9 @@ uncommitted changes, merges the remote main into every feature branch,
 resolves and upgrades the dependencies, re-verifies with `can commit`,
 records the upgrade as a `#gg:` system commit, integrates the remote
 feature branch (recognizing obsolete branches left over from squash
-merges) and pushes every repo.
+merges) and pushes every repo. The ticket hash is recorded as `doPush`, so a
+second run on an unchanged ticket returns right away — `--force` runs it
+anyway, `--git-force` is what force-pushes.
 
 `do review` runs `can review`, then `do push`, opens (or reuses) a pull
 request per repo — linking directly to the diff — and records the
