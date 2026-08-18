@@ -118,12 +118,14 @@ void main() {
     Set<String> skipped = const <String>{},
     EditMessage? editMessage,
     bool hasTerminal = true,
+    bool wasReviewed = false,
   }) {
     final canReview = MockCanReviewCommand();
     when(
       () => canReview.exec(
         directory: any(named: 'directory'),
         ggLog: any(named: 'ggLog'),
+        force: any(named: 'force'),
       ),
     ).thenAnswer((_) async {});
 
@@ -144,6 +146,15 @@ void main() {
         key: any(named: 'key'),
       ),
     ).thenAnswer((_) async {});
+    // Not reviewed yet — the tests that are about the short-circuit say so
+    // themselves.
+    when(
+      () => ticketState.readSuccess(
+        ticketDir: any(named: 'ticketDir'),
+        subs: any(named: 'subs'),
+        key: any(named: 'key'),
+      ),
+    ).thenAnswer((_) async => wasReviewed);
 
     final sortedProcessingList = MockSortedProcessingList();
     when(
@@ -265,6 +276,7 @@ void main() {
         () => bed.canReview.exec(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
         ),
         () => bed.doPush.exec(
           directory: any(
@@ -320,12 +332,112 @@ void main() {
       ]);
     });
 
+    test(
+      'skips the review when the current state was reviewed already',
+      () async {
+        final bed = makeCommand(wasReviewed: true);
+
+        await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+        expect(messages, [
+          '\nPrepare review',
+          '\n✓ Already reviewed. Review again with '
+              '"gg do review --force".\n',
+        ]);
+
+        // Nothing below the check ran — and the flag was not rewritten either.
+        verifyNever(
+          () => bed.canReview.exec(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            force: any(named: 'force'),
+          ),
+        );
+        verifyNever(
+          () => bed.doPush.exec(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            verbose: any(named: 'verbose'),
+          ),
+        );
+        verifyNever(
+          () => bed.createPullRequest.get(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: any(named: 'message'),
+            body: any(named: 'body'),
+          ),
+        );
+        verifyNever(
+          () => bed.ticketState.writeSuccess(
+            ticketDir: any(named: 'ticketDir'),
+            subs: any(named: 'subs'),
+            key: any(named: 'key'),
+          ),
+        );
+      },
+    );
+
+    test('--force reviews a state that was reviewed already', () async {
+      final bed = makeCommand(wasReviewed: true);
+
+      await runner(bed.command)
+          .run(['review', '--force', '--input', ticketDir.path]);
+
+      // The whole run happened — and `can review` was forced along with it,
+      // so its own cached success is bypassed too.
+      verify(
+        () => bed.canReview.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: true,
+        ),
+      ).called(1);
+      verify(
+        () => bed.doPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          verbose: any(named: 'verbose'),
+        ),
+      ).called(1);
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          body: any(named: 'body'),
+        ),
+      ).called(1);
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
+    });
+
+    test('does not force can review without --force', () async {
+      final bed = makeCommand();
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.canReview.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: false,
+        ),
+      ).called(1);
+    });
+
     test('fails and stops when can review fails', () async {
       final bed = makeCommand();
       when(
         () => bed.canReview.exec(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
         ),
       ).thenThrow(Exception('Uncommitted changes in A'));
 
@@ -697,8 +809,7 @@ void main() {
       ).called(1);
     });
 
-    test('asks again, pre-filled with what an earlier review '
-        'recorded', () async {
+    test('asks nothing again that an earlier review recorded', () async {
       Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
       await gg.RepoPublishConfig(
         versionIncrement: VersionIncrement.major,
@@ -716,11 +827,107 @@ void main() {
 
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
+      // Only B is asked: A's version increment and merge message are on
+      // record, and a recorded answer is not asked for a second time.
+      expect(seeds, ['']);
+      expect(configOf('A').versionIncrement, VersionIncrement.major);
+      expect(configOf('A').mergeMessage, 'kept');
+      expect(configOf('B').mergeMessage, 'fresh');
+
+      // A is not even announced — nothing was asked for it.
+      expect(messages, isNot(contains('\nA')));
+    });
+
+    test('--reask-version asks again, pre-filled with what an earlier review '
+        'recorded', () async {
+      Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
+      await gg.RepoPublishConfig(
+        versionIncrement: VersionIncrement.major,
+        mergeMessage: 'kept',
+      ).save(file: configFile('A'));
+
+      final seeds = <String>[];
+      final bed = makeCommand(
+        repos: ['A', 'B'],
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial.isEmpty ? 'fresh' : initial;
+        },
+      );
+
+      await runner(bed.command)
+          .run(['review', '--reask-version', '--input', ticketDir.path]);
+
       // Both repos are asked — A's editor pre-filled with its recorded
-      // answer, B's with nothing.
+      // answer, B's with nothing. That is how a choice stays correctable.
       expect(seeds, ['kept', '']);
       expect(configOf('A').mergeMessage, 'kept');
       expect(configOf('B').mergeMessage, 'fresh');
+    });
+
+    test('--force alone asks nothing again', () async {
+      // Forcing is about the hash, not about the questions: it re-runs a
+      // review the hash would skip, and still reuses every recorded answer.
+      Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
+      await gg.RepoPublishConfig(
+        versionIncrement: VersionIncrement.major,
+        mergeMessage: 'kept',
+      ).save(file: configFile('A'));
+
+      final seeds = <String>[];
+      final bed = makeCommand(
+        repos: ['A', 'B'],
+        wasReviewed: true,
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial.isEmpty ? 'fresh' : initial;
+        },
+      );
+
+      await runner(bed.command)
+          .run(['review', '--force', '--input', ticketDir.path]);
+
+      expect(seeds, ['']);
+      expect(configOf('A').mergeMessage, 'kept');
+    });
+
+    test('--reask-version reviews a state that was reviewed already', () async {
+      // Without this, the flag would ask nothing at all in the very case it
+      // is meant for: the version was answered, nothing else changed, and
+      // the answer turns out to be wrong.
+      await gg.RepoPublishConfig(
+        versionIncrement: VersionIncrement.major,
+        mergeMessage: 'kept',
+      ).save(file: configFile('A'));
+
+      final seeds = <String>[];
+      final bed = makeCommand(
+        wasReviewed: true,
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial;
+        },
+      );
+
+      await runner(bed.command)
+          .run(['review', '--reask-version', '--input', ticketDir.path]);
+
+      expect(seeds, ['kept']);
+      // `can review` is not forced by it — only the questions are.
+      verify(
+        () => bed.canReview.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: false,
+        ),
+      ).called(1);
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
     });
 
     test('carries the recorded commits into the pull request body', () async {
@@ -821,9 +1028,12 @@ void main() {
 
       await runner(bed.command).run(['review', '--input', ticketDir.path]);
 
-      expect(seeds, ['legacy']);
-      // Only the new per-repo file is written from now on.
+      // The legacy answers count as answered, so nothing is asked again …
+      expect(seeds, isEmpty);
+      // … and they are carried over: only the new per-repo file is written
+      // from now on.
       expect(configOf('A').mergeMessage, 'legacy');
+      expect(configOf('A').versionIncrement, VersionIncrement.major);
     });
 
     test('never fails the review when no question can be answered', () async {

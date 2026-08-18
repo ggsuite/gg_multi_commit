@@ -12,6 +12,7 @@ import 'package:gg_git/gg_git.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
+import 'package:gg_multi_core/gg_multi_core.dart' show MockTicketState;
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_publish/gg_publish.dart' as gg_publish;
@@ -41,6 +42,28 @@ class MockProcessRunner extends Mock {
   });
 }
 
+/// A [MockTicketState] that reports [wasPushed] and accepts every write —
+/// the state is what the short-circuit reads, so only the tests about it
+/// answer `true`.
+MockTicketState _stubbedTicketState({bool wasPushed = false}) {
+  final mock = MockTicketState();
+  when(
+    () => mock.readSuccess(
+      ticketDir: any(named: 'ticketDir'),
+      subs: any(named: 'subs'),
+      key: any(named: 'key'),
+    ),
+  ).thenAnswer((_) async => wasPushed);
+  when(
+    () => mock.writeSuccess(
+      ticketDir: any(named: 'ticketDir'),
+      subs: any(named: 'subs'),
+      key: any(named: 'key'),
+    ),
+  ).thenAnswer((_) async {});
+  return mock;
+}
+
 /// All collaborators of a [DoPushCommand], each pre-stubbed to succeed so a
 /// test only has to override the one it is about.
 typedef PushTestBed = ({
@@ -52,6 +75,7 @@ typedef PushTestBed = ({
   MockUpgradeDepsCommand upgradeDeps,
   MockCanCommitCommand canCommitCmd,
   MockMainBranch mainBranch,
+  MockTicketState ticketState,
 });
 
 void main() {
@@ -217,7 +241,10 @@ void main() {
   /// Builds a [DoPushCommand] whose collaborators all succeed for the
   /// [repos]: the ticket was reviewed, the trees are clean, merging main is a
   /// no-op and pushing works.
-  PushTestBed makeCommand({List<String> repos = const ['A', 'B']}) {
+  PushTestBed makeCommand({
+    List<String> repos = const ['A', 'B'],
+    bool wasPushed = false,
+  }) {
     final git = MockProcessRunner();
     stubBaseGit(git);
 
@@ -301,6 +328,8 @@ void main() {
       ],
     );
 
+    final ticketState = _stubbedTicketState(wasPushed: wasPushed);
+
     final command = DoPushCommand(
       ggLog: ggLog,
       ggDoPush: ggDoPush,
@@ -311,6 +340,7 @@ void main() {
       sortedProcessingList: sortedProcessingList,
       processRunner: git.call,
       mainBranch: mainBranch,
+      ticketState: ticketState,
     );
 
     return (
@@ -322,6 +352,7 @@ void main() {
       upgradeDeps: upgradeDeps,
       canCommitCmd: canCommitCmd,
       mainBranch: mainBranch,
+      ticketState: ticketState,
     );
   }
 
@@ -466,12 +497,13 @@ void main() {
         sortedProcessingList: _sortedList(ticketDir, const ['A', 'B']),
         processRunner: bed.git.call,
         mainBranch: bed.mainBranch,
+        ticketState: bed.ticketState,
       );
 
       await command.get(
         directory: ticketDir,
         ggLog: localLog,
-        force: false,
+        gitForce: false,
         verbose: false,
       );
 
@@ -496,7 +528,24 @@ void main() {
       expect(localMessages.where((m) => m == '✓ Merged main into A'), isEmpty);
     });
 
-    test('forwards --force to gg do push', () async {
+    test('forwards --git-force to gg do push', () async {
+      final bed = makeCommand(repos: ['A']);
+
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--git-force']);
+
+      verify(
+        () => bed.ggDoPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: true,
+        ),
+      ).called(1);
+    });
+
+    test('--force does not force-push', () async {
+      // The two flags mean two different things: `--force` bypasses the
+      // recorded state, `--git-force` force-pushes.
       final bed = makeCommand(repos: ['A']);
 
       await runner(bed.command)
@@ -506,7 +555,76 @@ void main() {
         () => bed.ggDoPush.exec(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          force: true,
+          force: false,
+        ),
+      ).called(1);
+    });
+
+    test('skips the push when this state was pushed already', () async {
+      final bed = makeCommand(repos: ['A'], wasPushed: true);
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+      expect(messages, [
+        '\n✓ Already pushed. Push again with "gg do push --force".\n',
+      ]);
+
+      // Nothing below the check ran — no merge, no upgrade, no push.
+      verifyNever(
+        () => bed.upgradeDeps.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          majorVersions: any(named: 'majorVersions'),
+        ),
+      );
+      verifyNever(
+        () => bed.ggDoPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      );
+      verifyNever(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: any(named: 'key'),
+        ),
+      );
+    });
+
+    test('--force pushes a state that was pushed already', () async {
+      final bed = makeCommand(repos: ['A'], wasPushed: true);
+
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--force']);
+
+      verify(
+        () => bed.ggDoPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      ).called(1);
+    });
+
+    test('records the push so the next run can short-circuit', () async {
+      final bed = makeCommand(repos: ['A']);
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(
+            named: 'ticketDir',
+            that: isA<Directory>().having(
+              (d) => d.path,
+              'path',
+              ticketDir.path,
+            ),
+          ),
+          subs: any(named: 'subs'),
+          key: DoPushCommand.stateKey,
         ),
       ).called(1);
     });

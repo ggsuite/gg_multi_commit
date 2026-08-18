@@ -60,6 +60,13 @@ class MergeConflictException implements Exception {
 ///    (`git pull --rebase`; an obsolete leftover branch of an already merged
 ///    ticket is replaced instead — see [_remoteBranchIsObsolete]), and every
 ///    repo is pushed via gg_one's `gg do push`.
+/// 7. The ticket hash is stored as `doPush` in `<ticket>/.gg.json`.
+///
+/// **A state that was pushed already is skipped.** Step 7's hash is read
+/// before step 1, so a second `gg do push` on an unchanged ticket returns
+/// right away instead of merging main, upgrading and verifying again — the
+/// same short-circuit `gg can commit` has. `--force` ignores the hash and
+/// runs everything; `--git-force` is what force-pushes.
 ///
 /// `gg do review` runs this automatically before it opens the pull requests.
 class DoPushCommand extends DirCommand<void> {
@@ -76,7 +83,9 @@ class DoPushCommand extends DirCommand<void> {
     SortedProcessingList? sortedProcessingList,
     ProcessRunner? processRunner,
     gg_publish.MainBranch? mainBranch,
-  }) : _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
+    TicketState? ticketState,
+  }) : _ticketState = ticketState ?? TicketState(ggLog: ggLog),
+       _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
        _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _isCommitted = isCommitted ?? IsCommitted(ggLog: ggLog),
        _upgradeDependencies =
@@ -88,6 +97,12 @@ class DoPushCommand extends DirCommand<void> {
        _mainBranch = mainBranch ?? gg_publish.MainBranch(ggLog: ggLog) {
     _addArgs();
   }
+
+  /// State key used to persist the successful push in `<ticketDir>/.gg.json`.
+  static const String stateKey = 'doPush';
+
+  /// Caches successful runs at ticket level.
+  final TicketState _ticketState;
 
   /// Instance of gg DoPush to perform the push action
   final gg.DoPush _ggDoPush;
@@ -118,6 +133,7 @@ class DoPushCommand extends DirCommand<void> {
     required Directory directory,
     required GgLog ggLog,
     bool? force,
+    bool? gitForce,
     bool? verbose,
     bool? majorVersions,
     bool? upgrade,
@@ -126,6 +142,7 @@ class DoPushCommand extends DirCommand<void> {
     directory: directory,
     ggLog: ggLog,
     force: force,
+    gitForce: gitForce,
     verbose: verbose,
     majorVersions: majorVersions,
     upgrade: upgrade,
@@ -136,13 +153,17 @@ class DoPushCommand extends DirCommand<void> {
     required Directory directory,
     required GgLog ggLog,
     bool? force,
+    bool? gitForce,
     bool? verbose,
     bool? majorVersions,
     bool? upgrade,
   }) async {
-    // Read verbose/force flags from CLI if not provided programmatically.
+    // Read the flags from CLI if not provided programmatically. [force]
+    // bypasses the recorded state, [gitForce] force-pushes — two different
+    // things, so they are two different flags.
     verbose ??= argResults?['verbose'] as bool? ?? false;
     force ??= argResults?['force'] as bool? ?? false;
+    gitForce ??= argResults?['git-force'] as bool? ?? false;
     majorVersions ??= argResults?['major-versions'] as bool? ?? true;
     upgrade ??= argResults?['upgrade'] as bool? ?? true;
 
@@ -166,6 +187,22 @@ class DoPushCommand extends DirCommand<void> {
 
     if (nodes.isEmpty) {
       ggLog(cWarn('⚠️ No repos in this ticket'));
+      return;
+    }
+
+    // Was this very state pushed already? -----------------------------------
+    // Nothing below would change anything: the tree is the one the last push
+    // left on the remote, so the merge, the upgrade and the checks would all
+    // reach the same result again.
+    if (!force &&
+        await _ticketState.readSuccess(
+          ticketDir: ticketDir,
+          subs: nodes,
+          key: stateKey,
+        )) {
+      ggLog(
+        cDetail('\n✓ Already pushed. Push again with "gg do push --force".\n'),
+      );
       return;
     }
 
@@ -250,7 +287,17 @@ class DoPushCommand extends DirCommand<void> {
       nodes: nodes,
       ggLog: ggLog,
       taskLog: taskLog,
-      force: force,
+      gitForce: gitForce,
+    );
+
+    // Persist the push so the next invocation can short-circuit. Written
+    // last and from the state the flow leaves behind — the merge, the
+    // upgrade and its system commit all changed the tree, and it is *that*
+    // state which is now on the remote.
+    await _ticketState.writeSuccess(
+      ticketDir: ticketDir,
+      subs: nodes,
+      key: stateKey,
     );
   }
 
@@ -516,7 +563,7 @@ class DoPushCommand extends DirCommand<void> {
     required List<Node> nodes,
     required GgLog ggLog,
     required GgLog taskLog,
-    required bool force,
+    required bool gitForce,
   }) async {
     // The reason is printed once, right under the repo it belongs to. The
     // summary and the exception only name the repos — repeating a multi-line
@@ -544,7 +591,11 @@ class DoPushCommand extends DirCommand<void> {
           );
         }
 
-        await _ggDoPush.exec(directory: repoDir, ggLog: taskLog, force: force);
+        await _ggDoPush.exec(
+          directory: repoDir,
+          ggLog: taskLog,
+          force: gitForce,
+        );
         ggLog(cDetail('✓ Pushed'));
       } catch (e) {
         ggLog(
@@ -820,6 +871,12 @@ class DoPushCommand extends DirCommand<void> {
     argParser.addFlag(
       'force',
       abbr: 'f',
+      negatable: false,
+      help: 'Push again even if this state was pushed before.',
+      defaultsTo: false,
+    );
+    argParser.addFlag(
+      'git-force',
       help: 'Do a force push.',
       defaultsTo: false,
       negatable: true,
