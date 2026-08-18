@@ -5,6 +5,7 @@
 ### Changed
 
 - Improve error messages. Add --reeask-version
+- Use ggwsm in pipelines
 
 ## 4.1.0 - 2026-08-14
 
