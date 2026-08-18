@@ -33,7 +33,12 @@ merges) and pushes every repo.
 
 `do review` runs `can review`, then `do push`, opens (or reuses) a pull
 request per repo — linking directly to the diff — and records the
-hash-based `didReview` flag that `gg do publish` requires.
+hash-based `didReview` flag that `gg do publish` requires. That flag also
+skips the run: a state that was reviewed already returns right away, and a
+version increment answered once is not asked for again. `do review --force`
+ignores the flag and reviews anyway; `do review --reask-version` asks the
+version increment and merge message again, with the recorded answer
+pre-selected.
 
 ## License
 

@@ -35,6 +35,13 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 ///    `gg did review` can answer whether the current state was reviewed and
 ///    `gg do publish` refuses a state that was not.
 ///
+/// **The recorded hash also skips the run.** A state that was reviewed
+/// already is reviewed again by nobody: the second `gg do review` reads the
+/// hash as soon as it knows the repos and returns — before the push, the plan
+/// and the pull requests — the same short-circuit `gg can commit` and
+/// `gg can review` have. `--force` ignores the hash, runs every step and
+/// forces `can review` along with it.
+///
 /// **Why the questions are asked here.** A ticket carries repos that are only
 /// part of it because they sit between two changed packages; they are neither
 /// released nor worth reviewing. Asking their version increment — as the
@@ -42,8 +49,13 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 /// their pull request sent a reviewer to an empty diff. The plan answers both
 /// at once, and its answers are stored in each repository's own
 /// `<repo>/.gg/publish_config.json`, so `gg do publish` finds them and asks
-/// nothing again. Re-running the review IS how an answer is corrected: it
-/// asks every question afresh, with the recorded one pre-selected.
+/// nothing again. **A recorded answer is not asked for twice**: a review that
+/// runs again — because the ticket moved on, or because `--force` says so —
+/// reuses what the last one recorded and only asks what is still open.
+/// `--reask-version` is how an answer is corrected: it asks every question
+/// afresh, with the recorded one pre-selected. It also runs a review the hash
+/// would otherwise skip, because a question nobody reaches is a question
+/// nobody can correct.
 ///
 /// The review does not touch the repos' dependency references: the feature
 /// branches keep their local path references. Whoever checks the branch out
@@ -96,18 +108,34 @@ class DoReviewCommand extends DirCommand<void> {
     required Directory directory,
     required GgLog ggLog,
     bool? verbose,
+    bool? force,
+    bool? reaskVersion,
     Map<String, dynamic> options = const {},
-  }) => get(directory: directory, ggLog: ggLog, verbose: verbose);
+  }) => get(
+    directory: directory,
+    ggLog: ggLog,
+    verbose: verbose,
+    force: force,
+    reaskVersion: reaskVersion,
+  );
 
   @override
   Future<void> get({
     required Directory directory,
     required GgLog ggLog,
     bool? verbose,
+    bool? force,
+    bool? reaskVersion,
   }) async {
     ggLog(cH1('\nPrepare review'));
 
     verbose ??= argResults?['verbose'] as bool? ?? false;
+    // Local `final`s and not `force ??= …`: the flags are read inside the
+    // closure of the status printer below, where a mutable variable does not
+    // promote to non-null.
+    final bool isForced = force ?? argResults?['force'] as bool? ?? false;
+    final bool reask =
+        reaskVersion ?? argResults?['reask-version'] as bool? ?? false;
 
     // Step 1: Detect ticket folder ------------------------------------------
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -132,19 +160,45 @@ class DoReviewCommand extends DirCommand<void> {
       return;
     }
 
+    // Step 3: Was this very state reviewed already? -------------------------
+    // The hash step 8 recorded answers it. Nothing below would change
+    // anything — the push has nothing to push, the plan asks what it asked
+    // before and the pull requests are open already — so the run ends here.
+    // `--reask-version` skips the skip: the question it wants asked lives in
+    // step 6, which a short-circuited run never reaches.
+    if (!isForced &&
+        !reask &&
+        await _ticketState.readSuccess(
+          ticketDir: ticketDir,
+          subs: subs,
+          key: DidReviewCommand.stateKey,
+        )) {
+      ggLog(
+        cDetail(
+          '\n✓ Already reviewed. Review again with '
+          '"gg do review --force".\n',
+        ),
+      );
+      return;
+    }
+
     final GgLog taskLog = verbose ? ggLog : <String>[].add;
 
-    // Step 3: Can review? ---------------------------------------------------
+    // Step 4: Can review? ---------------------------------------------------
     await GgStatusPrinter<void>(
       message: 'Can review?',
       ggLog: ggLog,
       dark: true,
     ).run(
-      () async =>
-          _runCanReview(ticketDir: ticketDir, ggLog: taskLog, errorLog: ggLog),
+      () async => _runCanReview(
+        ticketDir: ticketDir,
+        ggLog: taskLog,
+        errorLog: ggLog,
+        force: isForced,
+      ),
     );
 
-    // Step 4: Push ----------------------------------------------------------
+    // Step 5: Push ----------------------------------------------------------
     // `do push` merges the main branches into the feature branches and
     // brings every repo onto the remote. A merge conflict bubbles up as
     // [MergeConflictException] with the full report; the half-merged
@@ -155,7 +209,7 @@ class DoReviewCommand extends DirCommand<void> {
       verbose: verbose,
     );
 
-    // Step 5: Plan the release ----------------------------------------------
+    // Step 6: Plan the release ----------------------------------------------
     // Only now is the state the reviewer will see final: `do push` merged the
     // main branches in and refreshed the dependencies, so only now can the
     // skip check be trusted. The pass decides which repos the ticket releases
@@ -164,9 +218,10 @@ class DoReviewCommand extends DirCommand<void> {
       ticketDir: ticketDir,
       subs: subs,
       ggLog: ggLog,
+      reask: reask,
     );
 
-    // Step 6: Open a pull request per released repo and print its url -------
+    // Step 7: Open a pull request per released repo and print its url -------
     // Everything is on the remote now, so the work can be reviewed right
     // away instead of only when it is published.
     await _createPullRequests(
@@ -177,7 +232,7 @@ class DoReviewCommand extends DirCommand<void> {
       taskLog: taskLog,
     );
 
-    // Step 7: Persist the review --------------------------------------------
+    // Step 8: Persist the review --------------------------------------------
     // `gg did review` answers with this hash whether the *current* state was
     // reviewed, and `gg do publish` refuses a state that was not.
     await _ticketState.writeSuccess(
@@ -189,9 +244,13 @@ class DoReviewCommand extends DirCommand<void> {
 
   /// Plans what the ticket releases and stores the answers for the publish.
   ///
-  /// Each repository's `publish_config.json` is read back first, so the
-  /// questions arrive with the answers of an earlier run pre-selected — they
-  /// are asked again, because a choice made earlier has to stay correctable.
+  /// Each repository's `publish_config.json` is read back first, and what it
+  /// records is **not asked again**: a review that runs a second time —
+  /// because the ticket moved on — asks only the repositories whose version
+  /// increment or merge message is still open. Being asked the same version
+  /// increment on every review is what made the question feel like a toll on
+  /// the flow. [reask] asks all of them again, with the recorded answer
+  /// pre-selected, because a choice made earlier has to stay correctable.
   /// A repository still carrying the progress of an unfinished publish is
   /// left exactly as it is: its answers are used, nothing is asked and
   /// nothing is written, because overwriting it would strand the `--continue`
@@ -203,6 +262,7 @@ class DoReviewCommand extends DirCommand<void> {
     required Directory ticketDir,
     required List<Node> subs,
     required GgLog ggLog,
+    required bool reask,
   }) async {
     final unfinishedPublish = anyRepoHasStatus(
       repoDirs: subs.map((node) => node.directory),
@@ -222,9 +282,10 @@ class DoReviewCommand extends DirCommand<void> {
       ticketDir: ticketDir,
       subs: subs,
       ggLog: ggLog,
-      // Re-running a review IS how an answer is corrected, so every
-      // question is asked again with the recorded one pre-selected.
-      reconfigure: true,
+      // A recorded answer is reused; only `--reask-version` asks it again,
+      // with the recorded one pre-selected — that is how an answer is
+      // corrected. A `--force` alone re-runs the review, not the questions.
+      reconfigure: reask,
       // A review is not a release: it never forces one, and it never fails
       // for a question a headless run cannot answer — `do publish` asks it.
       ask: !unfinishedPublish,
@@ -356,13 +417,21 @@ class DoReviewCommand extends DirCommand<void> {
   }
 
   /// Executes `gg_multi can review` for the given ticket directory.
+  ///
+  /// [force] is handed on: a forced review re-runs the checks even when their
+  /// own cached success still matches.
   Future<void> _runCanReview({
     required Directory ticketDir,
     required GgLog ggLog,
     required GgLog errorLog,
+    required bool force,
   }) async {
     try {
-      await _canReviewCommand.exec(directory: ticketDir, ggLog: ggLog);
+      await _canReviewCommand.exec(
+        directory: ticketDir,
+        ggLog: ggLog,
+        force: force,
+      );
     } catch (e) {
       errorLog(cError('${(e as dynamic).message}'));
       rethrow;
@@ -377,6 +446,19 @@ class DoReviewCommand extends DirCommand<void> {
       help: 'Show detailed log output.',
       defaultsTo: false,
       negatable: true,
+    );
+    argParser.addFlag(
+      'force',
+      abbr: 'f',
+      negatable: false,
+      help: 'Review again even if the current state was reviewed before.',
+      defaultsTo: false,
+    );
+    argParser.addFlag(
+      'reask-version',
+      negatable: false,
+      help: 'Ask the version increment and merge message again.',
+      defaultsTo: false,
     );
   }
 }

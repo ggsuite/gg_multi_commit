@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Improve error messages. Add --reeask-version
+
 ## 4.1.0 - 2026-08-14
 
 ### Changed
