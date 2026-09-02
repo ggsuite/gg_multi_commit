@@ -364,45 +364,51 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      path: "../gg_multi_core"
-      relative: true
-    source: path
-    version: "4.1.2"
+      name: gg_multi_core
+      sha256: d4f4392ad84bbe69daf187e97a2a568043187b1820e1b29846f1ec5731ab1311
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.0"
   gg_one:
     dependency: "direct main"
     description:
-      path: "../gg_one"
-      relative: true
-    source: path
-    version: "14.3.0"
+      name: gg_one
+      sha256: "132f3109de693aae6c53d869d445654bf5d26b10b7cb74e487e7d823b491f30b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "14.4.0"
   gg_one_commit:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_commit"
-      relative: true
-    source: path
-    version: "2.3.0"
+      name: gg_one_commit
+      sha256: "36ea5465566ba7e0a8826cbc6e6687f985854cdfa8808ecc070bd2c1666ffc88"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.0"
   gg_one_core:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_core"
-      relative: true
-    source: path
-    version: "2.5.1"
+      name: gg_one_core
+      sha256: "1fb18e3fc1666711ff0b439d86d319e4595932c11192a3236c5ff915aa33f26b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.6.0"
   gg_one_do_publish:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_do_publish"
-      relative: true
-    source: path
-    version: "2.6.1"
+      name: gg_one_do_publish
+      sha256: "1d4e0b2a50bab70006b09535470b07bb630c90044366074af9930ce0313eb7dc"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.7.0"
   gg_one_merge:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_merge"
-      relative: true
-    source: path
-    version: "2.5.0"
+      name: gg_one_merge
+      sha256: "9f1dca0e01f93a1422cf6d2f57c16640476b0eaf83326fc38006be0904708102"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.6.0"
   gg_process:
     dependency: transitive
     description:
