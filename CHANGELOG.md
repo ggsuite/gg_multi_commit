@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.1.2 - 2026-09-02
+
+### Fixed
+
+- Fix Windows-specific test failures that blocked the review
+
 ## 4.1.1 - 2026-08-18
 
 ### Changed
