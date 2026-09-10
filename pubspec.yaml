@@ -9,24 +9,24 @@ environment:
 dependencies:
   gg_args: ^3.2.0
   gg_changelog: ^2.2.0
-  gg_console_colors: ^2.4.0
-  gg_git: ^4.3.0
-  gg_lang: ^0.6.1
+  gg_console_colors: ^2.5.0
+  gg_git: ^4.4.0
+  gg_lang: ^0.8.0
   gg_local_package_dependencies: ^4.2.0
   gg_log: ^1.2.0
-  gg_multi_core: ^4.2.0
-  gg_one: ^14.4.0
-  gg_publish: ^4.5.0
+  gg_multi_core: ^4.4.0
+  gg_one: ^14.4.1
+  gg_publish: ^4.7.0
   gg_status_printer: ^1.6.0
   path: ^1.9.1
   pub_semver: ^2.2.1
 
 dev_dependencies:
   args: ^2.7.0
-  dna_ggsuite: ^0.2.0
-  gg_capture_print: ^1.1.0
-  helix: ^1.3.0
+  dna_ggsuite: ^0.2.1
+  gg_capture_print: ^1.2.0
+  helix: ^1.7.1
   lints: ^6.1.0
   mocktail: ^1.0.5
   pubspec_parse: ^1.6.0
-  test: ^1.31.2
+  test: ^1.32.0
