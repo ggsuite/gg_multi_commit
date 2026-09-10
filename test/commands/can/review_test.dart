@@ -415,16 +415,17 @@ void main() {
         ], workingDirectory: any(named: 'workingDirectory')),
       ).thenAnswer((_) async => ProcessResult(1, 0, '', ''));
 
-      // B's branch is some non-default branch (not main/master), so it is a
+      // B has no branch at all — a detached HEAD prints »HEAD« — so it is a
       // genuine "not on a feature branch" error rather than an already-merged
-      // repo to skip.
+      // repo to skip. (Any *named* branch IsFeatureBranch does not report as
+      // feature branch is the default branch, whatever it is called.)
       when(
         () => mockProcessRunner('git', [
           'rev-parse',
           '--abbrev-ref',
           'HEAD',
         ], workingDirectory: any(named: 'workingDirectory')),
-      ).thenAnswer((_) async => ProcessResult(0, 0, 'detached-thing', ''));
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'HEAD', ''));
 
       // A is on a feature branch, B is not
       when(
@@ -471,6 +472,94 @@ void main() {
         isTrue,
       );
       expect(messages.any((m) => m.contains(' - B')), isTrue);
+    });
+
+    test('skips a repo already merged to a default branch that is not main '
+        'and fails for a detached HEAD', () async {
+      final mockSortedProcessingList = MockSortedProcessingList();
+      final mockProcessRunner = MockProcessRunner();
+      final mockIsFeatureBranch = MockIsFeatureBranch();
+
+      when(
+        () => mockSortedProcessingList.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenAnswer(
+        (_) async => [
+          Node(
+            name: 'A',
+            directory: Directory(path.join(ticketDir.path, 'A')),
+            manifest: DartPackageManifest(pubspec: Pubspec('A')),
+          ),
+          Node(
+            name: 'B',
+            directory: Directory(path.join(ticketDir.path, 'B')),
+            manifest: DartPackageManifest(pubspec: Pubspec('B')),
+          ),
+        ],
+      );
+
+      // A sits on develop, the default branch its remote declares. B has no
+      // branch at all: a detached HEAD prints »HEAD«.
+      when(
+        () => mockProcessRunner(
+          'git',
+          ['rev-parse', '--abbrev-ref', 'HEAD'],
+          workingDirectory: any(
+            named: 'workingDirectory',
+            that: predicate<String>((p) => path.basename(p) == 'A'),
+          ),
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'develop\n', ''));
+      when(
+        () => mockProcessRunner(
+          'git',
+          ['rev-parse', '--abbrev-ref', 'HEAD'],
+          workingDirectory: any(
+            named: 'workingDirectory',
+            that: predicate<String>((p) => path.basename(p) == 'B'),
+          ),
+        ),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'HEAD\n', ''));
+
+      // IsFeatureBranch knows the default branch: neither is on a feature
+      // branch.
+      when(
+        () => mockIsFeatureBranch.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenAnswer((_) async => false);
+
+      final runner = CommandRunner<void>('test', 'can review ticket')
+        ..addCommand(
+          CanReviewCommand(
+            ggLog: ggLog,
+            sortedProcessingList: mockSortedProcessingList,
+            processRunner: mockProcessRunner.call,
+            ggIsFeatureBranch: mockIsFeatureBranch,
+            ggPubGetOffline: _stubbedPubGetOffline(),
+            ticketState: _stubbedTicketState(),
+          ),
+        );
+
+      await expectLater(
+        runner.run(['review', '--verbose', '--input', ticketDir.path]),
+        throwsA(
+          isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('Not on a feature branch'), contains('B')),
+          ),
+        ),
+      );
+
+      expect(
+        messages.any((m) => m.contains('A is on develop — already merged')),
+        isTrue,
+      );
+      expect(messages.any((m) => m.contains('B is on')), isFalse);
     });
 
     test('skips repos already merged to main or master', () async {

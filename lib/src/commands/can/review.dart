@@ -175,11 +175,15 @@ class CanReviewCommand extends DirCommand<void> {
       if (isFeature) {
         continue;
       }
-      // A repo already merged to its default branch (main/master) has nothing
-      // left to review — e.g. when resuming a publish that already completed
-      // some repos. Skip it instead of failing.
+      // A repo already merged to its default branch has nothing left to
+      // review — e.g. when resuming a publish that already completed some
+      // repos. Skip it instead of failing. Which branch is the default one
+      // is [gg_publish.IsFeatureBranch]'s call — `develop` counts as much as
+      // `main` — so a branch it did not report as feature branch is the
+      // default branch. Only a detached HEAD, which has no branch at all,
+      // is still a repo that cannot be reviewed.
       final branch = await _currentBranch(repoDir);
-      if (branch == 'main' || branch == 'master') {
+      if (branch.isNotEmpty && branch != 'HEAD') {
         ggLog('$repoName is on $branch — already merged, skipping.');
         continue;
       }
