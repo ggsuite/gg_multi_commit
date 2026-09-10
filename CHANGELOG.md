@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `can review` accepts repositories whose default branch is not `main` or `master`; only a detached HEAD is refused
+
 ## 4.2.0 - 2026-09-02
 
 ### Changed
