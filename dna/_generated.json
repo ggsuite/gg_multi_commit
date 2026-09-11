@@ -197,7 +197,7 @@
       "name": "gg-one-commit",
       "package": "gg_one_commit",
       "ecosystem": "pub",
-      "resolvedVersion": "2.5.0",
+      "resolvedVersion": "2.6.0",
       "via": "gg-one",
       "hash": "0x32b3537fa5495175"
     },
@@ -205,7 +205,7 @@
       "name": "gg-merge",
       "package": "gg_merge",
       "ecosystem": "pub",
-      "resolvedVersion": "3.6.0",
+      "resolvedVersion": "3.7.0",
       "via": "gg-one-do-publish",
       "hash": "0x32b3537fa5495175"
     },
@@ -221,7 +221,7 @@
       "name": "gg-one-do-publish",
       "package": "gg_one_do_publish",
       "ecosystem": "pub",
-      "resolvedVersion": "2.7.2",
+      "resolvedVersion": "2.8.0",
       "via": "gg-one",
       "hash": "0x32b3537fa5495175"
     },
@@ -237,7 +237,7 @@
       "name": "gg-multi-core",
       "package": "gg_multi_core",
       "ecosystem": "pub",
-      "resolvedVersion": "4.5.0",
+      "resolvedVersion": "4.5.1",
       "via": null,
       "hash": "0x32b3537fa5495175"
     },
