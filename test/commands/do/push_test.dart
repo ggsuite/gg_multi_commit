@@ -399,7 +399,9 @@ void main() {
       );
       expect(
         messages.where(
-          (m) => m.contains('Merging main into the feature branches'),
+          (m) => m.contains(
+            'Merging the default branch into the feature branches',
+          ),
         ),
         isNotEmpty,
       );
@@ -897,7 +899,10 @@ void main() {
           'origin/main',
         ], workingDirectory: any(named: 'workingDirectory')),
       );
-      expect(messages, contains('✓ A has no main branch — nothing to merge'));
+      expect(
+        messages,
+        contains('✓ A has no default branch — nothing to merge'),
+      );
       expect(messages, contains('\nAll repos pushed\n'));
     });
 
@@ -1000,7 +1005,7 @@ void main() {
             isA<Exception>().having(
               (e) => rmControls(e.toString()),
               'message',
-              contains('Failed to merge main.'),
+              contains('Failed to merge the default branch.'),
             ),
           ),
         );
@@ -1701,7 +1706,183 @@ void main() {
         ),
       );
     });
+
+    test('rebases when the repo has no default branch — nothing to compare '
+        'the remote branch against', () async {
+      final bed = makeCommand(repos: ['A']);
+      when(
+        () => bed.mainBranch.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenThrow(ArgumentError('Could not determine the main branch.'));
+      stubIntegrateProbes(bed.git);
+      when(
+        () => bed.git('git', [
+          'pull',
+          '--rebase',
+          'origin',
+          'TICKP',
+        ], workingDirectory: any(named: 'workingDirectory')),
+      ).thenAnswer((_) async => ProcessResult(0, 0, 'ok', ''));
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+      verify(
+        () => bed.git('git', [
+          'pull',
+          '--rebase',
+          'origin',
+          'TICKP',
+        ], workingDirectory: path.join(ticketDir.path, 'A')),
+      ).called(1);
+      verifyNever(
+        () => bed.git(
+          'git',
+          any(that: contains('cherry')),
+          workingDirectory: any(named: 'workingDirectory'),
+        ),
+      );
+    });
   });
+
+  group(
+    'DoPushCommand against a real origin whose default branch is develop',
+    () {
+      /// Runs git [args] in [dir] and returns the trimmed stdout.
+      Future<String> git(List<String> args, Directory dir) async {
+        final result = await defaultProcessRunner(
+          'git',
+          args,
+          workingDirectory: dir.path,
+        );
+        if (result.exitCode != 0) {
+          fail('git ${args.join(' ')} failed in ${dir.path}: ${result.stderr}');
+        }
+        return result.stdout.toString().trim();
+      }
+
+      /// Real git; everything else (`dart pub get`) succeeds without running.
+      Future<ProcessResult> gitOnly(
+        String executable,
+        List<String> arguments, {
+        String? workingDirectory,
+        Map<String, String>? environment,
+        bool runInShell = true,
+      }) {
+        if (executable != 'git') {
+          return Future.value(ProcessResult(0, 0, '', ''));
+        }
+        return defaultProcessRunner(
+          executable,
+          arguments,
+          workingDirectory: workingDirectory,
+          environment: environment,
+          runInShell: runInShell,
+        );
+      }
+
+      test('detects the obsolete remote branch against origin/develop and '
+          'replaces it — no main exists anywhere', () async {
+        // A bare origin that declares develop as its default branch.
+        final remote = Directory(path.join(tempDir.path, 'origin.git'))
+          ..createSync();
+        await git(['init', '--bare', '--initial-branch=develop'], remote);
+
+        // Seed it the way a finished ticket leaves a remote behind: develop
+        // with an initial commit, a ticket branch TICKP with one real commit,
+        // and that commit squash-merged into develop while TICKP survives.
+        final seed = Directory(path.join(tempDir.path, 'seed'))..createSync();
+        await git(['init', '--initial-branch=develop'], seed);
+        await git(['config', 'user.email', 'test@example.com'], seed);
+        await git(['config', 'user.name', 'Test'], seed);
+        await git(['remote', 'add', 'origin', remote.path], seed);
+        File(path.join(seed.path, 'pubspec.yaml'))
+            .writeAsStringSync('name: C\n');
+        await git(['add', '.'], seed);
+        await git(['commit', '-m', 'Initial commit'], seed);
+        await git(['push', '-u', 'origin', 'develop'], seed);
+
+        await git(['checkout', '-b', 'TICKP'], seed);
+        File(path.join(seed.path, 'fix.txt')).writeAsStringSync('fixed\n');
+        await git(['add', '.'], seed);
+        await git(['commit', '-m', 'Fix the rm bug'], seed);
+        await git(['push', '-u', 'origin', 'TICKP'], seed);
+        final obsoleteHead = await git(['rev-parse', 'HEAD'], seed);
+
+        await git(['checkout', 'develop'], seed);
+        await git(['merge', '--squash', 'TICKP'], seed);
+        await git(['commit', '-m', 'Fix the rm bug (#1)'], seed);
+        await git(['push', 'origin', 'develop'], seed);
+
+        // The ticket repo: a fresh clone (origin/HEAD → develop) whose ticket
+        // branch is rebuilt from the current develop. The remote TICKP is now
+        // a leftover whose only commit is on develop by content.
+        final repoDir = Directory(path.join(ticketDir.path, 'C'));
+        await git(['clone', remote.path, repoDir.path], tempDir);
+        await git(['config', 'user.email', 'test@example.com'], repoDir);
+        await git(['config', 'user.name', 'Test'], repoDir);
+        await git(['checkout', '-b', 'TICKP'], repoDir);
+        expect(
+          await git([
+            'symbolic-ref',
+            '--short',
+            'refs/remotes/origin/HEAD',
+          ], repoDir),
+          'origin/develop',
+        );
+        expect(await git(['branch', '-a'], repoDir), isNot(contains('main')));
+        final localHead = await git(['rev-parse', 'HEAD'], repoDir);
+        expect(localHead, isNot(obsoleteHead));
+
+        final bed = makeCommand(repos: ['C']);
+        final command = DoPushCommand(
+          ggLog: ggLog,
+          ggDoPush: bed.ggDoPush,
+          systemCommit: bed.systemCommit,
+          isCommitted: bed.isCommitted,
+          upgradeDependencies: bed.upgradeDeps,
+          canCommit: bed.canCommitCmd,
+          sortedProcessingList: _sortedList(ticketDir, ['C']),
+          processRunner: gitOnly,
+          mainBranch: gg_publish.MainBranch(ggLog: ggLog),
+          ticketState: bed.ticketState,
+        );
+
+        await runner(command)
+            .run(['push', '--input', ticketDir.path, '--verbose']);
+
+        // The leftover was recognized against develop and overwritten with the
+        // local state, so the following push is a fast-forward.
+        expect(
+          messages.any(
+            (m) => m.contains(
+              'origin/TICKP of C was a leftover of an already merged ticket',
+            ),
+          ),
+          isTrue,
+        );
+        final remoteTickp = await git([
+          'ls-remote',
+          '--heads',
+          'origin',
+          'TICKP',
+        ], repoDir);
+        expect(remoteTickp, startsWith(localHead));
+        verify(
+          () => bed.ggDoPush.exec(
+            directory: any(
+              named: 'directory',
+              that: predicate<Directory>((d) => d.path == repoDir.path),
+            ),
+            ggLog: any(named: 'ggLog'),
+            force: false,
+          ),
+        ).called(1);
+        expect(messages, contains('\nAll repos pushed\n'));
+      });
+    },
+  );
 }
 
 /// Returns a [MockSortedProcessingList] resolving [repos] inside [ticketDir].

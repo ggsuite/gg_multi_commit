@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `gg do push` detects an obsolete remote branch against the repository's default branch instead of `origin/main`
+
 ## 4.2.1 - 2026-09-11
 
 ### Fixed

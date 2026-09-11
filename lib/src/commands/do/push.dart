@@ -21,7 +21,7 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
 
-/// Thrown when merging the main branch into a feature branch ends in
+/// Thrown when merging the default branch into a feature branch ends in
 /// conflicts.
 ///
 /// The conflicts are deliberately left in the working tree so the user can
@@ -45,8 +45,8 @@ class MergeConflictException implements Exception {
 /// to happen before the remote sees the branches lives here:
 ///
 /// 1. All repos must be committed (checked via gg_git's `IsCommitted`).
-/// 2. The remote main branch is merged into every feature branch, so the
-///    pushed state always contains the current main.
+/// 2. The remote default branch is merged into every feature branch, so the
+///    pushed state always contains the current default branch.
 /// 3. The dependencies of every repo are upgraded
 ///    (»dart pub upgrade [--major-versions] --tighten«). `--no-upgrade`
 ///    skips this step — `do publish`'s ticket-wide checks do so, because
@@ -64,7 +64,8 @@ class MergeConflictException implements Exception {
 ///
 /// **A state that was pushed already is skipped.** Step 7's hash is read
 /// before step 1, so a second `gg do push` on an unchanged ticket returns
-/// right away instead of merging main, upgrading and verifying again — the
+/// right away instead of merging the default branch, upgrading and
+/// verifying again — the
 /// same short-circuit `gg can commit` has. `--force` ignores the hash and
 /// runs everything; `--git-force` is what force-pushes.
 ///
@@ -74,7 +75,8 @@ class DoPushCommand extends DirCommand<void> {
   DoPushCommand({
     required super.ggLog,
     super.name = 'push',
-    super.description = 'Merge main into the ticket repos and push them',
+    super.description =
+        'Merge the default branch into the ticket repos and push them',
     gg.DoPush? ggDoPush,
     gg.GgSystemCommit? systemCommit,
     IsCommitted? isCommitted,
@@ -125,7 +127,8 @@ class DoPushCommand extends DirCommand<void> {
   /// Runs git commands (merge, fetch, integrate).
   final ProcessRunner _processRunner;
 
-  /// Detects the name of a repository's main branch (`main`/`master`).
+  /// Detects the name of a repository's default branch — what the remote
+  /// declares as `origin/HEAD`, else `main`/`master`.
   final gg_publish.MainBranch _mainBranch;
 
   @override
@@ -230,11 +233,11 @@ class DoPushCommand extends DirCommand<void> {
       dark: true,
     ).run(() async => _checkUncommittedChanges(nodes: nodes, ggLog: taskLog));
 
-    // Merge the remote main branch into every feature branch, so the pushed
-    // state always contains the current main. No repo is pushed unless every
-    // repo merged cleanly.
+    // Merge the remote default branch into every feature branch, so the
+    // pushed state always contains the current default branch. No repo is
+    // pushed unless every repo merged cleanly.
     await GgStatusPrinter<void>(
-      message: 'Merging main into the feature branches',
+      message: 'Merging the default branch into the feature branches',
       ggLog: ggLog,
       dark: true,
     ).run(
@@ -242,7 +245,8 @@ class DoPushCommand extends DirCommand<void> {
           _mergeMainIntoRepos(nodes: nodes, ggLog: taskLog, errorLog: ggLog),
     );
 
-    // The merge brings the manifests of main into the feature branches, so
+    // The merge brings the manifests of the default branch into the feature
+    // branches, so
     // the resolved dependencies of every repo can be outdated now. Resolve
     // them again before the upgrade runs — a stale `pubspec.lock` would
     // otherwise make the resolution below start from broken state.
@@ -416,8 +420,9 @@ class DoPushCommand extends DirCommand<void> {
   // ...........................................................................
   /// Merges `origin/<main>` into the current branch of all [nodes].
   ///
-  /// `<main>` is the repo's detected main branch (`main`/`master`); a repo
-  /// without one has nothing to integrate and is skipped.
+  /// `<main>` is the repo's detected default branch (`origin/HEAD`, else
+  /// `main`/`master`); a repo without one has nothing to integrate and is
+  /// skipped.
   Future<void> _mergeMainIntoRepos({
     required List<Node> nodes,
     required GgLog ggLog,
@@ -429,13 +434,14 @@ class DoPushCommand extends DirCommand<void> {
 
       final String? mainBranch = await _mainBranchName(repoDir);
       if (mainBranch == null) {
-        ggLog(cDetail('✓ $repoName has no main branch — nothing to merge'));
+        ggLog(cDetail('✓ $repoName has no default branch — nothing to merge'));
         continue;
       }
 
       try {
-        // Make sure `origin/<main>` points to the remote's current main.
-        // Without this the merge below would silently merge a stale main.
+        // Make sure `origin/<main>` points to the remote's current default
+        // branch. Without this the merge below would silently merge a stale
+        // one.
         await _runGit(
           <String>['fetch', 'origin', mainBranch],
           repoDir: repoDir,
@@ -490,14 +496,15 @@ class DoPushCommand extends DirCommand<void> {
             cError(rmControls('$e')),
           ].join('\n'),
         );
-        throw Exception(cDetail('Failed to merge main.'));
+        throw Exception(cDetail('Failed to merge the default branch.'));
       }
     }
   }
 
   // ...........................................................................
-  /// The name of the main branch of [repoDir] (`main`/`master`), or null when
-  /// the repository has neither.
+  /// The name of the default branch of [repoDir] — what the remote declares
+  /// as `origin/HEAD`, else `main`/`master` — or null when the repository has
+  /// none.
   Future<String?> _mainBranchName(Directory repoDir) async {
     try {
       return await _mainBranch.get(directory: repoDir, ggLog: <String>[].add);
@@ -517,7 +524,7 @@ class DoPushCommand extends DirCommand<void> {
     cError('Merging origin/$mainBranch into $repoName produced conflicts:'),
     for (final file in conflicts) cPath(' - $repoName/$file'),
     cAction('Please resolve the conflicts. Then execute: ') +
-        cCmd("gg do commit -m 'Merge main' --no-log"),
+        cCmd("gg do commit -m 'Merge $mainBranch' --no-log"),
   ].join('\n');
 
   // ...........................................................................
@@ -631,9 +638,10 @@ class DoPushCommand extends DirCommand<void> {
   /// an actionable error — we never force-push.
   ///
   /// The one exception is an **obsolete** remote branch — see
-  /// [_remoteBranchIsObsolete]: rebasing onto it would replay the whole main
-  /// branch onto a tip that predates it and conflict on commits that are long
-  /// merged. Such a branch is overwritten with `--force-with-lease` instead.
+  /// [_remoteBranchIsObsolete]: rebasing onto it would replay the whole
+  /// default branch onto a tip that predates it and conflict on commits that
+  /// are long merged. Such a branch is overwritten with `--force-with-lease`
+  /// instead.
   Future<void> _integrateRemoteBranch({
     required Directory repoDir,
     required String repoName,
@@ -678,10 +686,16 @@ class DoPushCommand extends DirCommand<void> {
       return;
     }
 
-    if (await _remoteBranchIsObsolete(
-      repoDir: repoDir,
-      remoteHead: remoteHead,
-    )) {
+    // The obsolete-branch analysis compares against the repo's default
+    // branch — `develop` in a repo that declares it, not a hard-wired `main`.
+    // A repo without one cannot have an obsolete branch and rebases as usual.
+    final mainBranch = await _mainBranchName(repoDir);
+    if (mainBranch != null &&
+        await _remoteBranchIsObsolete(
+          repoDir: repoDir,
+          remoteHead: remoteHead,
+          mainBranch: mainBranch,
+        )) {
       await _replaceObsoleteRemoteBranch(
         repoDir: repoDir,
         repoName: repoName,
@@ -727,41 +741,44 @@ class DoPushCommand extends DirCommand<void> {
   /// Whether `origin/<branch>` is a leftover of a ticket that was **already
   /// merged**, and therefore must not be rebased onto.
   ///
-  /// A ticket branch that was squash-merged into `main` keeps existing on the
-  /// remote when the provider did not delete it. Re-using the ticket (a fresh
-  /// `gg do add`/`do checkout`) recreates
-  /// the branch locally *from the current main* — which now contains the
-  /// squashed ticket plus everything merged after it. `git pull --rebase`
-  /// then replays all of those commits onto a tip that predates them and dies
-  /// in conflicts on foreign, long-merged work.
+  /// A ticket branch that was squash-merged into the default branch keeps
+  /// existing on the remote when the provider did not delete it. Re-using the
+  /// ticket (a fresh `gg do add`/`do checkout`) recreates the branch locally
+  /// *from the current default branch* — which now contains the squashed
+  /// ticket plus everything merged after it. `git pull --rebase` then replays
+  /// all of those commits onto a tip that predates them and dies in conflicts
+  /// on foreign, long-merged work.
   ///
-  /// The branch counts as obsolete when every commit it holds on top of the
-  /// local history is either
+  /// [mainBranch] is the repo's default branch (`main`, `master`, `develop`,
+  /// …). The branch counts as obsolete when every commit it holds on top of
+  /// the local history is either
   ///
-  /// * already contained in `origin/main` **by content** (`git cherry`
-  ///   compares patch ids, so a squash merge is recognized), or
+  /// * already contained in `origin/<mainBranch>` **by content** (`git
+  ///   cherry` compares patch ids, so a squash merge is recognized), or
   /// * one of gg's own bookkeeping commits (`#gg: …`, or a legacy subject) —
   ///   the ref-flipping commits of an earlier gg version carry no work.
   ///
   /// Anything else — a real commit somebody pushed to the branch and that is
-  /// not on main — makes this return false, so the regular rebase runs and
-  /// no work can be lost.
+  /// not on the default branch — makes this return false, so the regular
+  /// rebase runs and no work can be lost.
   Future<bool> _remoteBranchIsObsolete({
     required Directory repoDir,
     required String remoteHead,
+    required String mainBranch,
   }) async {
-    // The local branch must be up to date with main — otherwise this is an
-    // ordinary divergence and not the "branch rebuilt from main" situation.
-    // `origin/main` is current: the push fetched and merged it in its merge
-    // step. A repository without it fails this check and is never treated as
-    // obsolete.
-    if (!await _isAncestor('origin/main', 'HEAD', repoDir: repoDir)) {
+    // The local branch must be up to date with the default branch —
+    // otherwise this is an ordinary divergence and not the "branch rebuilt
+    // from the default branch" situation. `origin/<mainBranch>` is current:
+    // the push fetched and merged it in its merge step. A repository without
+    // it fails this check and is never treated as obsolete.
+    if (!await _isAncestor('origin/$mainBranch', 'HEAD', repoDir: repoDir)) {
       return false;
     }
 
-    // Commits of the remote branch that are already on main by content.
+    // Commits of the remote branch that are already on the default branch by
+    // content.
     final cherry = await _runGit(
-      <String>['cherry', 'origin/main', remoteHead],
+      <String>['cherry', 'origin/$mainBranch', remoteHead],
       repoDir: repoDir,
       allowFailure: true,
     );
