@@ -76,6 +76,7 @@ typedef PushTestBed = ({
   MockCanCommitCommand canCommitCmd,
   MockMainBranch mainBranch,
   MockTicketState ticketState,
+  gg.MockGgState ggState,
 });
 
 void main() {
@@ -330,6 +331,15 @@ void main() {
 
     final ticketState = _stubbedTicketState(wasPushed: wasPushed);
 
+    final ggState = gg.MockGgState();
+    when(
+      () => ggState.writeSuccess(
+        directory: any(named: 'directory'),
+        key: any(named: 'key'),
+        ignoreUnstaged: any(named: 'ignoreUnstaged'),
+      ),
+    ).thenAnswer((_) async {});
+
     final command = DoPushCommand(
       ggLog: ggLog,
       ggDoPush: ggDoPush,
@@ -341,6 +351,7 @@ void main() {
       processRunner: git.call,
       mainBranch: mainBranch,
       ticketState: ticketState,
+      ggState: ggState,
     );
 
     return (
@@ -353,6 +364,7 @@ void main() {
       canCommitCmd: canCommitCmd,
       mainBranch: mainBranch,
       ticketState: ticketState,
+      ggState: ggState,
     );
   }
 
@@ -493,6 +505,7 @@ void main() {
         ggLog: localLog,
         ggDoPush: bed.ggDoPush,
         systemCommit: bed.systemCommit,
+        ggState: bed.ggState,
         isCommitted: bed.isCommitted,
         upgradeDependencies: bed.upgradeDeps,
         canCommit: bed.canCommitCmd,
@@ -1240,6 +1253,40 @@ void main() {
       expect(path.basename((captured.single as Directory).path), 'B');
     });
 
+    // Regression: origin/main had moved on while the ticket was open. The
+    // merge left every tree clean, so no system commit was made — and the
+    // recorded »everything is committed« hash stayed the one of the tree
+    // before the merge. The publish right after the push then failed with
+    // »Not committed yet. Please run gg do commit.«
+    test(
+      'records the commit state anew in repos the merge left clean',
+      () async {
+        final bed = makeCommand(repos: ['A', 'B']);
+
+        await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+        final captured = verify(
+          () => bed.ggState.writeSuccess(
+            directory: captureAny(named: 'directory'),
+            key: gg.GgState.doCommitKey,
+          ),
+        ).captured;
+        expect(captured.map((d) => path.basename((d as Directory).path)), [
+          'A',
+          'B',
+        ]);
+        verifyNever(
+          () => bed.systemCommit.commit(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: any(named: 'message'),
+            userCommitMessage: any(named: 'userCommitMessage'),
+            stateKey: any(named: 'stateKey'),
+          ),
+        );
+      },
+    );
+
     test('the system commit message reflects --no-major-versions', () async {
       final bed = makeCommand(repos: ['A']);
 
@@ -1840,6 +1887,7 @@ void main() {
           ggLog: ggLog,
           ggDoPush: bed.ggDoPush,
           systemCommit: bed.systemCommit,
+          ggState: bed.ggState,
           isCommitted: bed.isCommitted,
           upgradeDependencies: bed.upgradeDeps,
           canCommit: bed.canCommitCmd,

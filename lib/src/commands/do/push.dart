@@ -86,7 +86,9 @@ class DoPushCommand extends DirCommand<void> {
     ProcessRunner? processRunner,
     gg_publish.MainBranch? mainBranch,
     TicketState? ticketState,
+    gg.GgState? ggState,
   }) : _ticketState = ticketState ?? TicketState(ggLog: ggLog),
+       _ggState = ggState ?? gg.GgState(ggLog: ggLog),
        _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
        _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
        _isCommitted = isCommitted ?? IsCommitted(ggLog: ggLog),
@@ -111,6 +113,10 @@ class DoPushCommand extends DirCommand<void> {
 
   /// Records the changes of the upgrade phase as a `#gg:` system commit.
   final gg.GgSystemCommit _systemCommit;
+
+  /// The per-repo state behind `gg did commit` — recorded anew after the
+  /// merge changed a tree that is otherwise clean.
+  final gg.GgState _ggState;
 
   /// Checks whether everything in a repository is committed.
   final IsCommitted _isCommitted;
@@ -328,6 +334,16 @@ class DoPushCommand extends DirCommand<void> {
         ggLog: ggLog,
       );
       if (isCommitted) {
+        // The merge of the default branch leaves the tree clean but changed:
+        // the recorded »everything is committed« hash no longer matches, and
+        // `can merge` and `can publish` would refuse the repo right after
+        // this push with »Not committed yet«. `can commit` verified the
+        // merged tree a moment ago, so record it. A hash that still matches
+        // is left alone.
+        await _ggState.writeSuccess(
+          directory: repoDir,
+          key: gg.GgState.doCommitKey,
+        );
         continue;
       }
       // A system commit, not »gg do commit«: it must contain gg's own files
