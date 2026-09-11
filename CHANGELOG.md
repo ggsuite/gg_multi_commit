@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.2.2 - 2026-09-11
+
+### Fixed
+
+- `gg do push` detects an obsolete remote branch against the repository's default branch instead of `origin/main`
+- `gg do push` records the commit state anew after the merge of the default branch, so a ticket whose default branch moved on no longer fails the publish with "Not committed yet"
+
 ## 4.2.1 - 2026-09-11
 
 ### Fixed
