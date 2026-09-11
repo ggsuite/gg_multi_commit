@@ -354,33 +354,37 @@ packages:
     source: hosted
     version: "1.2.0"
   gg_merge:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_merge"
-      relative: true
-    source: path
-    version: "3.6.0"
+      name: gg_merge
+      sha256: "1de63e6cf6850cf6c679277365bf35053f21e3d420c96e183236f077544207ec"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.7.0"
   gg_multi_core:
     dependency: "direct main"
     description:
-      path: "../gg_multi_core"
-      relative: true
-    source: path
-    version: "4.5.0"
+      name: gg_multi_core
+      sha256: da2757d9ad3f99a4aef07fc532990ab21892da203df0c35ecb913d684816800b
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.5.1"
   gg_one:
     dependency: "direct main"
     description:
-      path: "../gg_one"
-      relative: true
-    source: path
+      name: gg_one
+      sha256: "8b6042481ff036a971e4632c7687223dd4fa767c367b36fff1caded529b20e2b"
+      url: "https://pub.dev"
+    source: hosted
     version: "14.4.1"
   gg_one_commit:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_commit"
-      relative: true
-    source: path
-    version: "2.5.0"
+      name: gg_one_commit
+      sha256: "7e4429588bb3448684287781d1aa00494ce6311fa1fd6f713f47b4c87d26f444"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.6.0"
   gg_one_core:
     dependency: transitive
     description:
@@ -390,18 +394,20 @@ packages:
     source: hosted
     version: "2.7.0"
   gg_one_do_publish:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_do_publish"
-      relative: true
-    source: path
-    version: "2.7.2"
+      name: gg_one_do_publish
+      sha256: "9b5af75b0ef1e501206c7acdbe6a0425c410edb408d96f22e8c25c9615577c81"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.8.0"
   gg_one_merge:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "../gg_one_merge"
-      relative: true
-    source: path
+      name: gg_one_merge
+      sha256: "294375c0a369a608167692805ff76b8c479576c70ca880ab8333a305a7f1ba2f"
+      url: "https://pub.dev"
+    source: hosted
     version: "2.6.2"
   gg_process:
     dependency: transitive
