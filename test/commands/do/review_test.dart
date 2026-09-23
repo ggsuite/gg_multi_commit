@@ -32,6 +32,9 @@ class MockDoPushCommand extends Mock implements DoPushCommand {}
 
 class MockCreatePullRequest extends Mock implements gg.CreatePullRequest {}
 
+class MockEnsurePublishConfigIgnored extends Mock
+    implements gg.EnsurePublishConfigIgnored {}
+
 class MockPublishedVersion extends Mock implements PublishedVersion {}
 
 class FakeDirectory extends Fake implements Directory {}
@@ -77,6 +80,7 @@ typedef ReviewTestBed = ({
   MockCreatePullRequest createPullRequest,
   MockTicketState ticketState,
   MockPublishSkipCheck skipCheck,
+  MockEnsurePublishConfigIgnored ensureIgnored,
 });
 
 void main() {
@@ -119,6 +123,7 @@ void main() {
     EditMessage? editMessage,
     bool hasTerminal = true,
     bool wasReviewed = false,
+    bool ensureIgnoredThrows = false,
   }) {
     final canReview = MockCanReviewCommand();
     when(
@@ -202,6 +207,16 @@ void main() {
 
     final pullRequest = createPullRequest ?? stubCreatePullRequest();
 
+    final ensureIgnored = MockEnsurePublishConfigIgnored();
+    when(
+      () => ensureIgnored.ensure(
+        directory: any(named: 'directory'),
+        commit: any(named: 'commit'),
+      ),
+    ).thenAnswer(
+      (_) async => ensureIgnoredThrows ? throw Exception('boom') : true,
+    );
+
     final command = DoReviewCommand(
       ggLog: ggLog,
       canReviewCommand: canReview,
@@ -218,6 +233,7 @@ void main() {
         editMessage: editMessage ?? (initial) async => initial,
         hasTerminal: () => hasTerminal,
       ),
+      ensureIgnored: ensureIgnored,
     );
 
     return (
@@ -227,6 +243,7 @@ void main() {
       createPullRequest: pullRequest,
       ticketState: ticketState,
       skipCheck: skipCheck,
+      ensureIgnored: ensureIgnored,
     );
   }
 
@@ -577,6 +594,86 @@ void main() {
       expect(
         overrides.readAsStringSync(),
         'dependency_overrides:\n  b:\n    path: ../B\n',
+      );
+    });
+  });
+
+  group('DoReviewCommand publish config visibility', () {
+    test('hides the publish files of every repo', () async {
+      // The plan writes a publish_config.json into each repo. Unless the
+      // .gitignore names it, it stays behind as an untracked change.
+      final bed = makeCommand(repos: ['A', 'B']);
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      final directories = verify(
+        () => bed.ensureIgnored.ensure(
+          directory: captureAny(named: 'directory'),
+          commit: any(named: 'commit'),
+        ),
+      ).captured.cast<Directory>().map((d) => path.basename(d.path)).toList();
+
+      expect(directories, ['A', 'B']);
+    });
+
+    test('hides them before the push, not after', () async {
+      // The .gitignore commit has to ride along on the push. Written
+      // afterwards it would stay behind unpushed - trading one leftover
+      // change for another.
+      final order = <String>[];
+      final bed = makeCommand();
+      when(
+        () => bed.ensureIgnored.ensure(
+          directory: any(named: 'directory'),
+          commit: any(named: 'commit'),
+        ),
+      ).thenAnswer((_) async {
+        order.add('ensure');
+        return true;
+      });
+      when(
+        () => bed.doPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          verbose: any(named: 'verbose'),
+        ),
+      ).thenAnswer((_) async => order.add('push'));
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(order, ['ensure', 'push']);
+    });
+
+    test('warns but reviews on when a repo cannot be healed', () async {
+      // A .gitignore entry is not worth losing a reviewable push over - and
+      // the publish repeats the same call before it writes.
+      final bed = makeCommand(ensureIgnoredThrows: true);
+
+      await runner(bed.command)
+          .run(['review', '--input', ticketDir.path, '--verbose']);
+
+      expect(messages.join('\n'), contains('Could not update .gitignore of A'));
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: any(named: 'key'),
+        ),
+      ).called(1);
+    });
+
+    test('hides nothing when the review is short-circuited', () async {
+      // A state that was reviewed already returns before the push - and
+      // touching a .gitignore there would be work nobody asked for.
+      final bed = makeCommand(wasReviewed: true);
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      verifyNever(
+        () => bed.ensureIgnored.ensure(
+          directory: any(named: 'directory'),
+          commit: any(named: 'commit'),
+        ),
       );
     });
   });
