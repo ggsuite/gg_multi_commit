@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.3.0 - 2026-09-23
+
+### Changed
+
+- Hide the publish config do review writes
+
 ## 4.2.3 - 2026-09-14
 
 ## 4.2.2 - 2026-09-11

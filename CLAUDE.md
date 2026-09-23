@@ -48,6 +48,8 @@ There is no snapshot/rollback machinery: the push flips no refs, so its only mut
 
 **The review does not touch dependency references.** The feature branches keep the local path references `do add` wrote. Whoever checks a branch out recreates the whole setup from the ticket's `ticket.json` (`gg do import ticket <path|url>`).
 
+**Hiding what the plan writes** (`_hidePublishFiles`, gg_one's `EnsurePublishConfigIgnored`) runs **before the push**, for every repo of the ticket. The plan below writes a `publish_config.json` into each repo it releases, and it does so after the last commit — nothing picks it up afterwards. In a repo whose `.gitignore` predates the config/state split the file therefore stays behind as an untracked change, and the next is-committed check (`do push`, `do publish`, the `.gg/gg.json` state commit, none of which consult `GgState.ignoreFiles`) trips over it. The `.gitignore` is healed here and not later because the resulting bootstrap commit has to ride along on the push; written afterwards it would stay behind unpushed, trading one leftover change for another. A repo that already names the files produces no commit, and a repo that cannot be healed is warned about and reviewed anyway — a `.gitignore` entry is not worth losing a reviewable push over, and `do publish` repeats the same call before it writes. A short-circuited review does none of this: it returns before the push.
+
 **The release plan** (`_planRelease`, gg_multi_core's `PublishPlanner`) runs **after the push**: `do push` merges the main branches in and refreshes the dependencies, so only then can the skip check be trusted. It answers two things at once — which repos the ticket actually releases, and with which version increment and merge message — and stores the answers in each repository's own `<repo>/.gg/publish_config.json`, where `gg do publish` finds them. **This is where the version question lives.** Asking it at publish time asked it for repos the publish then skipped; a repo that is only in the ticket because it sits between two changed packages is neither released nor reviewed.
 
 Its edges, all of them chosen so a review never fails over a question: **a recorded answer is never asked for twice** (`reconfigure: reask`) — a review that runs again, because the ticket moved on or because `--force` says so, asks only the repositories whose version increment or merge message is still open. `--reask-version` asks all of them again with the recorded answer pre-selected, which is how a choice is corrected; `--force` is about the hash and re-asks nothing. The `gg do publish` afterwards asks only what is still open, so nothing is asked twice; a repository still carrying the **progress marker of an unfinished publish** is left exactly as it is — its answers are used, nothing is asked, nothing is written, because overwriting it would strand the `--continue` meant to finish that run; an unreadable file is reported and ignored; and a run without a terminal asks nothing at all (`requireAnswers: false`) and leaves the questions to the publish. Nothing is written when the ticket releases nothing.
@@ -73,3 +75,19 @@ Its edges, all of them chosen so a review never fails over a question: **a recor
 - **Test coverage**: 100% required. Every file under `lib/src/` must have a matching test at the same relative path under `test/`.
 - **Mocks**: Mock classes live in the same file as the class they mock, extending `MockDirCommand`.
 - **Commits/pushes**: Always go through `gg do commit` / `gg do push`, never raw `git commit` / `git push`.
+
+<!-- helix:claude_md:start -->
+
+# gg workflow
+
+This repo is developed ticket by ticket with the `gg` CLI. Follow the
+development guide, it tells you when to ask the user and which command
+comes next:
+
+@doc/guides/for-ai/ai-dev-guide.md
+
+The steps are also available as skills: `/gg-ticket`, `/gg-commit`,
+`/gg-push`, `/gg-publish`, `/gg-cleanup`. `/gg` lists them and says which
+one comes next.
+
+<!-- helix:claude_md:end -->

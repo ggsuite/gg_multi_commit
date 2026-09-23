@@ -73,6 +73,7 @@ class DoReviewCommand extends DirCommand<void> {
     gg.CreatePullRequest? createPullRequest,
     TicketState? ticketState,
     PublishPlanner? publishPlanner,
+    gg.EnsurePublishConfigIgnored? ensureIgnored,
   }) : _canReviewCommand = canReviewCommand ?? CanReviewCommand(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
@@ -80,7 +81,9 @@ class DoReviewCommand extends DirCommand<void> {
        _createPullRequest =
            createPullRequest ?? gg.CreatePullRequest(ggLog: ggLog),
        _ticketState = ticketState ?? TicketState(ggLog: ggLog),
-       _publishPlanner = publishPlanner ?? PublishPlanner(ggLog: ggLog) {
+       _publishPlanner = publishPlanner ?? PublishPlanner(ggLog: ggLog),
+       _ensureIgnored =
+           ensureIgnored ?? gg.EnsurePublishConfigIgnored(ggLog: ggLog) {
     _addArgs();
   }
 
@@ -102,6 +105,10 @@ class DoReviewCommand extends DirCommand<void> {
 
   /// Decides which repos the ticket releases and asks their publish questions.
   final PublishPlanner _publishPlanner;
+
+  /// Lists the files a publish writes beside the release — the publish config
+  /// among them — in each repository's `.gitignore`.
+  final gg.EnsurePublishConfigIgnored _ensureIgnored;
 
   @override
   Future<void> exec({
@@ -137,7 +144,7 @@ class DoReviewCommand extends DirCommand<void> {
     final bool reask =
         reaskVersion ?? argResults?['reask-version'] as bool? ?? false;
 
-    // Step 1: Detect ticket folder ------------------------------------------
+    // Step 1: Detect ticket folder -------------------------------------------
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
       path.absolute(directory.path),
     );
@@ -149,7 +156,7 @@ class DoReviewCommand extends DirCommand<void> {
     final ticketDir = Directory(ticketPath);
     final ticketName = path.basename(ticketDir.path);
 
-    // Step 2: Collect repos in processing order -----------------------------
+    // Step 2: Collect repos in processing order ------------------------------
     final subs = await _sortedProcessingList.get(
       directory: ticketDir,
       ggLog: ggLog,
@@ -160,12 +167,12 @@ class DoReviewCommand extends DirCommand<void> {
       return;
     }
 
-    // Step 3: Was this very state reviewed already? -------------------------
-    // The hash step 8 recorded answers it. Nothing below would change
+    // Step 3: Was this very state reviewed already? --------------------------
+    // The hash step 9 recorded answers it. Nothing below would change
     // anything — the push has nothing to push, the plan asks what it asked
     // before and the pull requests are open already — so the run ends here.
     // `--reask-version` skips the skip: the question it wants asked lives in
-    // step 6, which a short-circuited run never reaches.
+    // step 7, which a short-circuited run never reaches.
     if (!isForced &&
         !reask &&
         await _ticketState.readSuccess(
@@ -184,7 +191,7 @@ class DoReviewCommand extends DirCommand<void> {
 
     final GgLog taskLog = verbose ? ggLog : <String>[].add;
 
-    // Step 4: Can review? ---------------------------------------------------
+    // Step 4: Can review? ----------------------------------------------------
     await GgStatusPrinter<void>(
       message: 'Can review?',
       ggLog: ggLog,
@@ -198,7 +205,17 @@ class DoReviewCommand extends DirCommand<void> {
       ),
     );
 
-    // Step 5: Push ----------------------------------------------------------
+    // Step 5: Hide what the plan will write ----------------------------------
+    // Step 7 writes a `publish_config.json` into every repo it plans, and it
+    // does so *after* the push — nothing commits it afterwards. In a repo
+    // whose `.gitignore` predates the config/state split the file therefore
+    // stays behind as an untracked change, and the next `is committed` check
+    // — `do push`, `do publish`, the `.gg/gg.json` state commit — trips over
+    // it. Healing the `.gitignore` here, before the push, is what keeps the
+    // bootstrap commit from being left unpushed.
+    await _hidePublishFiles(subs: subs, ggLog: taskLog);
+
+    // Step 6: Push -----------------------------------------------------------
     // `do push` merges the main branches into the feature branches and
     // brings every repo onto the remote. A merge conflict bubbles up as
     // [MergeConflictException] with the full report; the half-merged
@@ -209,7 +226,7 @@ class DoReviewCommand extends DirCommand<void> {
       verbose: verbose,
     );
 
-    // Step 6: Plan the release ----------------------------------------------
+    // Step 7: Plan the release -----------------------------------------------
     // Only now is the state the reviewer will see final: `do push` merged the
     // main branches in and refreshed the dependencies, so only now can the
     // skip check be trusted. The pass decides which repos the ticket releases
@@ -221,7 +238,7 @@ class DoReviewCommand extends DirCommand<void> {
       reask: reask,
     );
 
-    // Step 7: Open a pull request per released repo and print its url -------
+    // Step 8: Open a pull request per released repo and print its url --------
     // Everything is on the remote now, so the work can be reviewed right
     // away instead of only when it is published.
     await _createPullRequests(
@@ -232,7 +249,7 @@ class DoReviewCommand extends DirCommand<void> {
       taskLog: taskLog,
     );
 
-    // Step 8: Persist the review --------------------------------------------
+    // Step 9: Persist the review ---------------------------------------------
     // `gg did review` answers with this hash whether the *current* state was
     // reviewed, and `gg do publish` refuses a state that was not.
     await _ticketState.writeSuccess(
@@ -240,6 +257,29 @@ class DoReviewCommand extends DirCommand<void> {
       subs: subs,
       key: DidReviewCommand.stateKey,
     );
+  }
+
+  /// Lists the files a publish writes — the answered `publish_config.json`
+  /// among them — in every repository's `.gitignore`, before anything is
+  /// pushed.
+  ///
+  /// A repository whose `.gitignore` already names them is not touched and
+  /// produces no commit. Nothing here may fail the review: a repository that
+  /// cannot be healed — no write permission, a `.gitignore` in a state the
+  /// guard rejects — is reported and left alone, because a `.gitignore` entry
+  /// is not worth losing a reviewable push over. The publish repeats the same
+  /// call before it writes, so an unhealed repository gets a second chance.
+  Future<void> _hidePublishFiles({
+    required List<Node> subs,
+    required GgLog ggLog,
+  }) async {
+    for (final node in subs) {
+      try {
+        await _ensureIgnored.ensure(directory: node.directory);
+      } catch (e) {
+        ggLog(cWarn('⚠️ Could not update .gitignore of ${node.name}: $e'));
+      }
+    }
   }
 
   /// Plans what the ticket releases and stores the answers for the publish.
