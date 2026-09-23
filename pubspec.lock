@@ -364,50 +364,44 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: d74180a706b6879baeed5bdc1e2131850efbd6407a5d0d126e93218c8de6d580
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.7.1"
   gg_one:
     dependency: "direct main"
     description:
-      name: gg_one
-      sha256: "53ae7bc5d0b0596a7a4a4d573ad2befb4ef3bc0816d12fa942ad09bdbd5e1f45"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one"
+      relative: true
+    source: path
     version: "14.4.4"
   gg_one_commit:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_commit
-      sha256: "6dc2a3e4d7fd7331813acf051a7acc382d5f5f6f4cd878b08cb1e16915e81ffe"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_commit"
+      relative: true
+    source: path
     version: "2.6.3"
   gg_one_core:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_core
-      sha256: c1ac8cc660e45123c50e308e1ac8c461311c461a0d33eb8f6942067226e3d766
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_core"
+      relative: true
+    source: path
     version: "2.9.0"
   gg_one_do_publish:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_do_publish
-      sha256: "04a633264c575ed80f5fe9af2c4b796533d374f86cdd1a4f45543c8c8466264e"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_do_publish"
+      relative: true
+    source: path
     version: "2.8.3"
   gg_one_merge:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_merge
-      sha256: "45bf744e2761ba339fe1532fc35985075c05ef02b74ad1b55590b0751a460172"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_merge"
+      relative: true
+    source: path
     version: "2.6.5"
   gg_process:
     dependency: transitive
