@@ -352,6 +352,7 @@ void main() {
       mainBranch: mainBranch,
       ticketState: ticketState,
       ggState: ggState,
+      gitRetry: GitRetry.example,
     );
 
     return (
@@ -1464,6 +1465,42 @@ void main() {
         );
       },
     );
+
+    test('retries a pull the remote dropped', () async {
+      final bed = makeCommand(repos: ['A']);
+      stubIntegrateProbes(bed.git);
+      var pulls = 0;
+      when(
+        () => bed.git('git', [
+          'pull',
+          '--rebase',
+          'origin',
+          'TICKP',
+        ], workingDirectory: any(named: 'workingDirectory')),
+      ).thenAnswer(
+        (_) async => ++pulls == 1
+            ? ProcessResult(
+                0,
+                128,
+                '',
+                'Connection to github.com closed by remote host.',
+              )
+            : ProcessResult(0, 0, 'ok', ''),
+      );
+
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--verbose']);
+
+      expect(pulls, 2);
+      expect(
+        messages,
+        contains('✓ Integrated origin/TICKP into A before push'),
+      );
+      expect(
+        messages.join('\n'),
+        contains('git pull --rebase origin TICKP failed with a transient'),
+      );
+    });
 
     test('skips the integration when the remote branch is already contained '
         'in the local history', () async {
