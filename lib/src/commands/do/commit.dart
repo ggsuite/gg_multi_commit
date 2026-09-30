@@ -53,6 +53,7 @@ class DoCommitCommand extends DirCommand<void> {
     String? message,
     cl.LogType? logType,
     bool? updateChangeLog,
+    bool? force,
     Map<String, dynamic> options = const {},
   }) => get(
     directory: directory,
@@ -60,6 +61,7 @@ class DoCommitCommand extends DirCommand<void> {
     message: message,
     logType: logType,
     updateChangeLog: updateChangeLog,
+    force: force,
   );
 
   @override
@@ -69,10 +71,12 @@ class DoCommitCommand extends DirCommand<void> {
     String? message,
     cl.LogType? logType,
     bool? updateChangeLog,
+    bool? force,
   }) async {
     ggLog(cH1('\nCommitting ...'));
 
     message ??= _messageOption;
+    force ??= argResults?['force'] as bool? ?? false;
 
     // Detect if we are inside a ticket folder
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -140,7 +144,7 @@ class DoCommitCommand extends DirCommand<void> {
           message: resolved?.text ?? shared,
           logType: logType,
           updateChangeLog: updateChangeLog,
-          force: false,
+          force: force,
         );
       } catch (e) {
         ggLog(
@@ -275,6 +279,14 @@ class DoCommitCommand extends DirCommand<void> {
       'message',
       abbr: 'm',
       help: 'The commit message and log entry',
+    );
+
+    argParser.addFlag(
+      'force',
+      abbr: 'f',
+      help: 'Commit without running checks (analyze/format/tests).',
+      defaultsTo: false,
+      negatable: true,
     );
   }
 }

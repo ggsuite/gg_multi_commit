@@ -5,6 +5,7 @@
 ### Added
 
 - Add --force to gg can commit
+- Add --force to gg do commit
 
 ## 4.3.0 - 2026-09-23
 
