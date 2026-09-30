@@ -28,6 +28,7 @@ void main() {
   final messages = <String>[];
   final committedMessages = <String?>[];
   final capturedInitials = <String>[];
+  final committedForces = <bool?>[];
 
   setUpAll(() {
     registerFallbackValue(FakeDirectory());
@@ -49,6 +50,7 @@ void main() {
       ),
     ).thenAnswer((invocation) async {
       committedMessages.add(invocation.namedArguments[#message] as String?);
+      committedForces.add(invocation.namedArguments[#force] as bool?);
     });
     return mock;
   }
@@ -64,6 +66,7 @@ void main() {
     messages.clear();
     committedMessages.clear();
     capturedInitials.clear();
+    committedForces.clear();
     tempDir = Directory.systemTemp.createTempSync('do_commit_ticket_test_');
     ticketsDir = Directory(path.join(tempDir.path, 'tickets'))..createSync();
     ticketDir = Directory(path.join(ticketsDir.path, 'TICKC'))..createSync();
@@ -207,7 +210,11 @@ void main() {
 
   group('commit message default from ticket.json', () {
     /// Runs `do commit` on [ticketDir], optionally with `-m` [message].
-    Future<void> run({String? message, EditMessage? edit}) async {
+    Future<void> run({
+      String? message,
+      EditMessage? edit,
+      List<String> args = const [],
+    }) async {
       final runner = CommandRunner<void>('test', 'do commit ticket')
         ..addCommand(
           DoCommitCommand(
@@ -221,8 +228,23 @@ void main() {
         '--input',
         ticketDir.path,
         if (message != null) ...['--message', message],
+        ...args,
       ]);
     }
+
+    test('passes --force on to every repo', () async {
+      // Without the flag every repo runs its checks.
+      await run(message: 'Msg');
+      expect(committedForces, [false, false]);
+
+      committedForces.clear();
+      await run(message: 'Msg', args: ['--force']);
+      expect(committedForces, [true, true]);
+
+      committedForces.clear();
+      await run(message: 'Msg', args: ['-f']);
+      expect(committedForces, [true, true]);
+    });
 
     test('reuses the ticket description when no message is given', () async {
       File(path.join(ticketDir.path, ticketJsonFileName))
