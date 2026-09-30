@@ -29,7 +29,9 @@ class CanCommitCommand extends DirCommand<void> {
   }) : _ggCanCommit = ggCanCommit ?? gg.CanCommit(ggLog: ggLog),
        _ggDidCommit = ggDidCommit ?? gg.DidCommit(ggLog: ggLog),
        _sortedProcessingList =
-           sortedProcessingList ?? SortedProcessingList(ggLog: ggLog);
+           sortedProcessingList ?? SortedProcessingList(ggLog: ggLog) {
+    _addArgs();
+  }
 
   /// Instance of gg CanCommit
   final gg.CanCommit _ggCanCommit;
@@ -44,11 +46,18 @@ class CanCommitCommand extends DirCommand<void> {
   Future<void> exec({
     required Directory directory,
     required GgLog ggLog,
+    bool? force,
     Map<String, dynamic> options = const {},
-  }) => get(directory: directory, ggLog: ggLog);
+  }) => get(directory: directory, ggLog: ggLog, force: force);
 
   @override
-  Future<void> get({required Directory directory, required GgLog ggLog}) async {
+  Future<void> get({
+    required Directory directory,
+    required GgLog ggLog,
+    bool? force,
+  }) async {
+    force ??= argResults?['force'] as bool? ?? false;
+
     // Detect if we are inside a ticket folder
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
       path.absolute(directory.path),
@@ -77,7 +86,7 @@ class CanCommitCommand extends DirCommand<void> {
       final repoName = path.basename(repoDir.path);
       ggLog('\n${cH1(repoName)}');
       try {
-        await _ggCanCommit.exec(directory: repoDir, ggLog: ggLog);
+        await _ggCanCommit.exec(directory: repoDir, ggLog: ggLog, force: force);
 
         // A repo with nothing left to commit changes the closing message
         // from »can be committed« to »committed«. The answer is only
@@ -106,6 +115,17 @@ class CanCommitCommand extends DirCommand<void> {
       allCommitted
           ? '\nAll repos committed\n'
           : '\nAll repos can be committed\n',
+    );
+  }
+
+  // Adds command line arguments
+  void _addArgs() {
+    argParser.addFlag(
+      'force',
+      abbr: 'f',
+      negatable: false,
+      help: 'Execute the checks even if they succeeded before.',
+      defaultsTo: false,
     );
   }
 }

@@ -37,6 +37,21 @@ MockGgDidCommit mockDidCommit(bool committed) {
   return mock;
 }
 
+/// A [gg.CanCommit] whose exec is stubbed once and hands over to [onExec].
+MockGgCanCommit mockCanCommit([
+  Future<void> Function(Invocation invocation)? onExec,
+]) {
+  final mock = MockGgCanCommit();
+  when(
+    () => mock.exec(
+      directory: any(named: 'directory'),
+      ggLog: any(named: 'ggLog'),
+      force: any(named: 'force'),
+    ),
+  ).thenAnswer((invocation) async => onExec?.call(invocation));
+  return mock;
+}
+
 void main() {
   late Directory tempDir;
   late Directory ticketsDir;
@@ -97,20 +112,11 @@ void main() {
     });
 
     test('checks all repos successfully', () async {
-      final mockGgCanCommit = MockGgCanCommit();
-
-      when(
-        () => mockGgCanCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-
       final runner = CommandRunner<void>('test', 'can commit ticket')
         ..addCommand(
           CanCommitCommand(
             ggLog: ggLog,
-            ggCanCommit: mockGgCanCommit,
+            ggCanCommit: mockCanCommit(),
             ggDidCommit: mockDidCommit(false),
           ),
         );
@@ -122,20 +128,11 @@ void main() {
     });
 
     test('reports »committed« when every repo is committed already', () async {
-      final mockGgCanCommit = MockGgCanCommit();
-
-      when(
-        () => mockGgCanCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-
       final runner = CommandRunner<void>('test', 'can commit ticket')
         ..addCommand(
           CanCommitCommand(
             ggLog: ggLog,
-            ggCanCommit: mockGgCanCommit,
+            ggCanCommit: mockCanCommit(),
             ggDidCommit: mockDidCommit(true),
           ),
         );
@@ -143,15 +140,36 @@ void main() {
       expect(messages.last, '\nAll repos committed\n');
     });
 
-    test('aborts on first repo that fails', () async {
-      final mockGgCanCommit = MockGgCanCommit();
+    test('passes --force on to every repo', () async {
+      final forced = <bool?>[];
+      final mockGgCanCommit = mockCanCommit((invocation) async {
+        forced.add(invocation.namedArguments[#force] as bool?);
+      });
 
-      when(
-        () => mockGgCanCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((invocation) async {
+      final runner = CommandRunner<void>('test', 'can commit ticket')
+        ..addCommand(
+          CanCommitCommand(
+            ggLog: ggLog,
+            ggCanCommit: mockGgCanCommit,
+            ggDidCommit: mockDidCommit(false),
+          ),
+        );
+
+      // Without the flag the repos may reuse an earlier success.
+      await runner.run(['commit', '--input', ticketDir.path]);
+      expect(forced, [false, false]);
+
+      forced.clear();
+      await runner.run(['commit', '--input', ticketDir.path, '--force']);
+      expect(forced, [true, true]);
+
+      forced.clear();
+      await runner.run(['commit', '--input', ticketDir.path, '-f']);
+      expect(forced, [true, true]);
+    });
+
+    test('aborts on first repo that fails', () async {
+      final mockGgCanCommit = mockCanCommit((invocation) async {
         final repoDir = invocation.namedArguments[#directory] as Directory;
         if (path.basename(repoDir.path) == 'B') {
           throw Exception('Failed to commit B');

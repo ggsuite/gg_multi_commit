@@ -13,7 +13,7 @@ lives in `gg_multi_core`.
 
 | Command                  | Purpose                                                                             |
 | ------------------------ | ----------------------------------------------------------------------------------- |
-| `can commit`             | run `gg can commit` in every ticket repo (analyze + format + tests)                 |
+| `can commit [--force]`   | run `gg can commit` in every ticket repo (analyze + format + tests)                 |
 | `can push`               | check that every ticket repo is push-ready                                          |
 | `can review`             | check that every repo is on a feature branch and committed                          |
 | `do commit [-m <msg>]`   | commit every ticket repo with the same message (defaults to the ticket description) |
