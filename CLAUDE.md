@@ -38,6 +38,8 @@ All commands extend `DirCommand<T>` from `gg_args`; the primary logic lives in `
 
 There is no snapshot/rollback machinery: the push flips no refs, so its only mutations are the main merge and the upgrade with its `#gg:` system commit — both of which are what the user wants to keep anyway.
 
+**Network commands are retried.** The fetches of `origin/<main>` and of the remote feature branch, the `ls-remote` probe, the `pull --rebase` and the lease-protected force push all go through `_runGitNetwork`, which wraps the injected `ProcessRunner` in gg_git's `GitRetry`: a connection the remote drops (GitHub's SSH throttling when a ticket has dozens of repos, a 5xx) is retried 5 s / 15 s / 45 s later. A rejected push or a rebase conflict is never retried. Tests pass `GitRetry.example`, which does not wait.
+
 ### `do upgrade deps`
 
 `UpgradeDepsCommand` (in `lib/src/commands/do/upgrade/deps.dart`) upgrades the dependencies of every ticket repo in dependency order by delegating to gg_one's `gg do upgrade deps` — »dart pub upgrade [--major-versions] --tighten«. The upgrade runs no checks itself; validation happens in the `gg can commit` step of the calling flow. Failures are collected per repo and summarized. `gg do push` runs it automatically, so a standalone run is only needed to upgrade without pushing. It commits nothing itself.

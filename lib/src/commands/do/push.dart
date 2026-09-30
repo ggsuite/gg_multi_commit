@@ -87,6 +87,7 @@ class DoPushCommand extends DirCommand<void> {
     gg_publish.MainBranch? mainBranch,
     TicketState? ticketState,
     gg.GgState? ggState,
+    this._gitRetry = const GitRetry(),
   }) : _ticketState = ticketState ?? TicketState(ggLog: ggLog),
        _ggState = ggState ?? gg.GgState(ggLog: ggLog),
        _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
@@ -132,6 +133,9 @@ class DoPushCommand extends DirCommand<void> {
 
   /// Runs git commands (merge, fetch, integrate).
   final ProcessRunner _processRunner;
+
+  /// Retries a git network command the remote dropped.
+  final GitRetry _gitRetry;
 
   /// Detects the name of a repository's default branch — what the remote
   /// declares as `origin/HEAD`, else `main`/`master`.
@@ -458,11 +462,11 @@ class DoPushCommand extends DirCommand<void> {
         // Make sure `origin/<main>` points to the remote's current default
         // branch. Without this the merge below would silently merge a stale
         // one.
-        await _runGit(
-          <String>['fetch', 'origin', mainBranch],
-          repoDir: repoDir,
-          allowFailure: true,
-        );
+        await _runGitNetwork(<String>[
+          'fetch',
+          'origin',
+          mainBranch,
+        ], repoDir: repoDir);
 
         final result = await _processRunner('git', <String>[
           'merge',
@@ -580,6 +584,19 @@ class DoPushCommand extends DirCommand<void> {
   );
 
   // ...........................................................................
+  /// Runs a git network command (fetch, pull, push, ls-remote) in [repoDir]
+  /// and returns its result — the caller decides what a failure means. A
+  /// connection the remote drops is retried.
+  Future<ProcessResult> _runGitNetwork(
+    List<String> args, {
+    required Directory repoDir,
+  }) => _gitRetry.run(
+    () => _processRunner('git', args, workingDirectory: repoDir.path),
+    ggLog: ggLog,
+    description: 'git ${args.join(' ')}',
+  );
+
+  // ...........................................................................
   /// Integrates the remote feature branch and pushes every repo, collecting
   /// the repos that failed instead of stopping at the first one.
   Future<void> _pushingRepos({
@@ -667,12 +684,12 @@ class DoPushCommand extends DirCommand<void> {
   }) async {
     // Nothing to integrate if the branch does not exist on the remote yet —
     // the push will simply create it.
-    final remoteBranch = await _processRunner('git', <String>[
+    final remoteBranch = await _runGitNetwork(<String>[
       'ls-remote',
       '--heads',
       'origin',
       branch,
-    ], workingDirectory: repoDir.path);
+    ], repoDir: repoDir);
     final remoteHasBranch =
         remoteBranch.exitCode == 0 &&
         (remoteBranch.stdout?.toString().trim().isNotEmpty ?? false);
@@ -690,11 +707,7 @@ class DoPushCommand extends DirCommand<void> {
         .first;
 
     // Make the remote commits available locally — the analysis walks them.
-    await _runGit(
-      <String>['fetch', 'origin', branch],
-      repoDir: repoDir,
-      allowFailure: true,
-    );
+    await _runGitNetwork(<String>['fetch', 'origin', branch], repoDir: repoDir);
 
     // Already contained in the local history — nothing to integrate. Checked
     // first because it is the cheap and by far most common case.
@@ -723,12 +736,12 @@ class DoPushCommand extends DirCommand<void> {
       return;
     }
 
-    final pull = await _processRunner('git', <String>[
+    final pull = await _runGitNetwork(<String>[
       'pull',
       '--rebase',
       'origin',
       branch,
-    ], workingDirectory: repoDir.path);
+    ], repoDir: repoDir);
     if (pull.exitCode != 0) {
       // Leave the repository in a clean (non-rebasing) state for the user.
       await _processRunner('git', <String>[
@@ -849,13 +862,13 @@ class DoPushCommand extends DirCommand<void> {
     required GgLog ggLog,
     required GgLog errorLog,
   }) async {
-    final push = await _processRunner('git', <String>[
+    final push = await _runGitNetwork(<String>[
       'push',
       '--force-with-lease=$branch:$remoteHead',
       '--set-upstream',
       'origin',
       'HEAD:refs/heads/$branch',
-    ], workingDirectory: repoDir.path);
+    ], repoDir: repoDir);
 
     if (push.exitCode != 0) {
       final stderrStr = push.stderr?.toString() ?? '';

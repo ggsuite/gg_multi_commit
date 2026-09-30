@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.5.0 - 2026-09-30
+
+### Changed
+
+- do push retries its git network commands (fetch, ls-remote, pull --rebase, lease-protected force push) on transient transport errors via gg_git's GitRetry
+
 ## 4.4.0 - 2026-09-30
 
 ### Added
