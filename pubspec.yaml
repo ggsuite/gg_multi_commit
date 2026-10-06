@@ -14,8 +14,8 @@ dependencies:
   gg_lang: ^0.8.1
   gg_local_package_dependencies: ^4.2.1
   gg_log: ^1.2.0
-  gg_multi_core: ^4.8.0
-  gg_one: ^14.4.4
+  gg_multi_core: ^4.9.0
+  gg_one: ^14.4.5
   gg_publish: ^4.9.0
   gg_status_printer: ^1.6.1
   path: ^1.9.1
@@ -23,9 +23,9 @@ dependencies:
 
 dev_dependencies:
   args: ^2.7.0
-  dna_ggsuite: ^0.2.2
+  dna_ggsuite: ^0.2.3
   gg_capture_print: ^1.2.0
-  helix: ^1.9.0
+  helix: ^1.10.0
   lints: ^6.1.0
   mocktail: ^1.0.5
   pubspec_parse: ^1.6.0
