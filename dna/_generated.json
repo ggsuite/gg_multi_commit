@@ -5,7 +5,7 @@
       "name": "base",
       "package": "helix",
       "ecosystem": null,
-      "resolvedVersion": "1.10.0",
+      "resolvedVersion": "1.9.0",
       "via": null,
       "hash": "0x6883da335b415f9d"
     },
@@ -61,9 +61,9 @@
       "name": "dna-vscode",
       "package": "dna_vscode",
       "ecosystem": "pub",
-      "resolvedVersion": "0.2.2",
+      "resolvedVersion": "0.2.1",
       "via": "dna-ggsuite",
-      "hash": "0x29fdd0bc52e50e39"
+      "hash": "0xa88376a88c6618fa"
     },
     {
       "name": "dna-clean-code",
@@ -85,15 +85,15 @@
       "name": "dna-gg",
       "package": "dna_gg",
       "ecosystem": "pub",
-      "resolvedVersion": "0.6.0",
+      "resolvedVersion": "0.5.1",
       "via": "dna-ggsuite",
-      "hash": "0x07dc3242e9b7bbc2"
+      "hash": "0x80c6dc9dbb7e23c3"
     },
     {
       "name": "dna-ggsuite",
       "package": "dna_ggsuite",
       "ecosystem": "pub",
-      "resolvedVersion": "0.2.3",
+      "resolvedVersion": "0.2.2",
       "via": "gg-log",
       "hash": "0x72dd616194a8dbe1"
     },
@@ -133,7 +133,7 @@
       "name": "gg-git",
       "package": "gg_git",
       "ecosystem": "pub",
-      "resolvedVersion": "4.5.1",
+      "resolvedVersion": "4.5.3",
       "via": null,
       "hash": "0x32b3537fa5495175"
     },
@@ -149,7 +149,7 @@
       "name": "gg-is-flutter",
       "package": "gg_is_flutter",
       "ecosystem": "pub",
-      "resolvedVersion": "2.2.1",
+      "resolvedVersion": "2.2.2",
       "via": "gg-one-core",
       "hash": "0x32b3537fa5495175"
     },
@@ -157,7 +157,7 @@
       "name": "gg-publish",
       "package": "gg_publish",
       "ecosystem": "pub",
-      "resolvedVersion": "4.9.0",
+      "resolvedVersion": "4.9.1",
       "via": "gg-one-core",
       "hash": "0x32b3537fa5495175"
     },
@@ -165,7 +165,7 @@
       "name": "gg-status-printer",
       "package": "gg_status_printer",
       "ecosystem": "pub",
-      "resolvedVersion": "1.6.1",
+      "resolvedVersion": "1.6.2",
       "via": "gg-one-core",
       "hash": "0x32b3537fa5495175"
     },
@@ -173,7 +173,7 @@
       "name": "gg-test",
       "package": "gg_test",
       "ecosystem": "pub",
-      "resolvedVersion": "3.3.2",
+      "resolvedVersion": "3.3.3",
       "via": "gg-one-core",
       "hash": "0x32b3537fa5495175"
     },
@@ -181,7 +181,7 @@
       "name": "gg-version",
       "package": "gg_version",
       "ecosystem": "pub",
-      "resolvedVersion": "5.7.0",
+      "resolvedVersion": "5.7.1",
       "via": "gg-one-core",
       "hash": "0x32b3537fa5495175"
     },
@@ -189,7 +189,7 @@
       "name": "gg-one-core",
       "package": "gg_one_core",
       "ecosystem": "pub",
-      "resolvedVersion": "2.11.0",
+      "resolvedVersion": "2.12.0",
       "via": "gg-one-commit",
       "hash": "0x32b3537fa5495175"
     },
@@ -197,7 +197,7 @@
       "name": "gg-one-commit",
       "package": "gg_one_commit",
       "ecosystem": "pub",
-      "resolvedVersion": "2.8.0",
+      "resolvedVersion": "2.7.1",
       "via": "gg-one",
       "hash": "0x32b3537fa5495175"
     },
@@ -205,7 +205,7 @@
       "name": "gg-merge",
       "package": "gg_merge",
       "ecosystem": "pub",
-      "resolvedVersion": "3.8.1",
+      "resolvedVersion": "3.8.0",
       "via": "gg-one-do-publish",
       "hash": "0x32b3537fa5495175"
     },
@@ -213,7 +213,7 @@
       "name": "gg-one-merge",
       "package": "gg_one_merge",
       "ecosystem": "pub",
-      "resolvedVersion": "2.7.2",
+      "resolvedVersion": "2.7.0",
       "via": "gg-one-do-publish",
       "hash": "0x32b3537fa5495175"
     },
@@ -221,7 +221,7 @@
       "name": "gg-one-do-publish",
       "package": "gg_one_do_publish",
       "ecosystem": "pub",
-      "resolvedVersion": "2.11.1",
+      "resolvedVersion": "2.10.0",
       "via": "gg-one",
       "hash": "0x32b3537fa5495175"
     },
@@ -229,7 +229,7 @@
       "name": "gg-one",
       "package": "gg_one",
       "ecosystem": "pub",
-      "resolvedVersion": "14.4.5",
+      "resolvedVersion": "14.4.4",
       "via": "gg-multi-core",
       "hash": "0x32b3537fa5495175"
     },
@@ -237,7 +237,7 @@
       "name": "gg-multi-core",
       "package": "gg_multi_core",
       "ecosystem": "pub",
-      "resolvedVersion": "4.9.0",
+      "resolvedVersion": "4.8.0",
       "via": null,
       "hash": "0x32b3537fa5495175"
     },
@@ -254,7 +254,7 @@
     "claudeMdInclude": null,
     "claudeMdFromDna": true
   },
-  "baseVersion": "1.10.0",
+  "baseVersion": "1.9.0",
   "baseHash": "0x6883da335b415f9d",
   "instances": [
     {
@@ -271,11 +271,11 @@
     },
     {
       "path": ".claude/skills/gg-commit/SKILL.md",
-      "hash": "0xdb7a268397facfc4"
+      "hash": "0xd2e82c49f737093b"
     },
     {
       "path": ".claude/skills/gg-publish/SKILL.md",
-      "hash": "0x61626e5e2425d9ab"
+      "hash": "0xaa7d82e9b407f561"
     },
     {
       "path": ".claude/skills/gg-push/SKILL.md",
@@ -283,7 +283,7 @@
     },
     {
       "path": ".claude/skills/gg-ticket/SKILL.md",
-      "hash": "0xe2e320fd71159027"
+      "hash": "0x06f83f4f73c9fb42"
     },
     {
       "path": ".claude/skills/gg/SKILL.md",
@@ -347,7 +347,7 @@
     },
     {
       "path": ".vscode/settings.json",
-      "hash": "0x56f3eedd72c6218f"
+      "hash": "0x32f5972239aa0a78"
     },
     {
       "path": "doc/guides/blog-guide.md",
@@ -383,7 +383,7 @@
     },
     {
       "path": "doc/guides/for-ai/ai-dev-guide.md",
-      "hash": "0xa7d0d75d19ccfb0f"
+      "hash": "0xbbaf82081767678b"
     },
     {
       "path": "doc/guides/for-ai/ai-review-guide.md",

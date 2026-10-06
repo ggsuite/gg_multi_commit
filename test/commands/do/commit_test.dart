@@ -466,46 +466,27 @@ void main() {
       expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
     });
 
-    test('re-opens the editor on a too long first line', () async {
+    test('accepts a long first line from the editor', () async {
       await proposeIn('A', firstLine: 'ok');
       await proposeIn('B', firstLine: 'B change');
 
-      var call = 0;
-      await run(
-        edit: (initial) async {
-          capturedInitials.add(initial);
-          call++;
-          return call == 1 ? 'a' * 61 : 'Corrected';
-        },
-      );
+      await run(edit: editMessage('a' * 200));
 
-      expect(messages.any((m) => m.contains('60 characters')), isTrue);
-      expect(committedMessages.first, 'Corrected');
-    });
-
-    test('gives up after three invalid attempts', () async {
-      await proposeIn('A', firstLine: 'ok');
-      await proposeIn('B', firstLine: 'B change');
-
-      await expectLater(
-        () => run(edit: (_) async => 'a' * 61),
-        throwsA(isA<Exception>()),
-      );
+      expect(committedMessages.first, 'a' * 200);
       expect(
-        messages.any((m) => m.contains('still invalid after 3 attempts')),
-        isTrue,
+        gg.RepoPublishConfig.tryLoad(repo('A'))!.commits.single.firstLine,
+        'a' * 200,
       );
     });
 
-    test('rejects a -m whose first line is too long', () async {
+    test('accepts a -m with a long first line', () async {
       await proposeIn('A', firstLine: 'ok');
       await proposeIn('B', firstLine: 'B change');
 
-      await expectLater(
-        () => run(message: 'a' * 61),
-        throwsA(isA<Exception>()),
-      );
-      expect(messages.any((m) => m.contains('Invalid commit message')), isTrue);
+      await run(message: 'a' * 200);
+
+      expect(capturedInitials, isEmpty);
+      expect(committedMessages, ['a' * 200, 'a' * 200]);
     });
 
     test('-m wins over the proposal', () async {
