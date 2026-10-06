@@ -133,11 +133,7 @@ class DoCommitCommand extends DirCommand<void> {
       try {
         resolved = proposal == null
             ? null
-            : await _resolveMessageFor(
-                message: message,
-                proposal: proposal,
-                ggLog: ggLog,
-              );
+            : await _resolveMessageFor(message: message, proposal: proposal);
         await _ggDoCommit.exec(
           directory: repoDir,
           ggLog: ggLog,
@@ -208,51 +204,21 @@ class DoCommitCommand extends DirCommand<void> {
   /// Returns the commit message of a repository whose `publish_config.json`
   /// carries a [proposal].
   ///
-  /// An explicit [message] (`-m`) wins and is validated like any other; the
-  /// proposal otherwise pre-fills the editor. The first line must stay within
-  /// [gg.maxCommitMessageFirstLineLength] characters — a violation re-opens
-  /// the editor with what was typed, so the rule is a correction rather than
-  /// a lost message. A run nobody can correct (no terminal, `-m`) reports the
-  /// violation instead of looping.
+  /// An explicit [message] (`-m`) wins; the proposal otherwise pre-fills the
+  /// editor, and clearing it falls back to the proposal. The first line may
+  /// be of any length.
   Future<gg.CommitMessage> _resolveMessageFor({
     required String? message,
     required gg.CommitMessage proposal,
-    required GgLog ggLog,
   }) async {
     final explicit = message?.trim();
     if (explicit != null && explicit.isNotEmpty) {
-      final parsed = gg.CommitMessage.parse(explicit);
-      final error = gg.CommitMessage.validationError(parsed.firstLine);
-      if (error != null) {
-        throw Exception(cError('Invalid commit message: $error'));
-      }
-      return parsed;
+      return gg.CommitMessage.parse(explicit);
     }
 
-    var seed = proposal.text;
-    for (var attempt = 0; attempt < _maxMessageAttempts; attempt++) {
-      final edited = (await _editMessage(seed) ?? '').trim();
-      final parsed = gg.CommitMessage.parse(
-        edited.isEmpty ? proposal.text : edited,
-      );
-      final error = gg.CommitMessage.validationError(parsed.firstLine);
-      if (error == null) {
-        return parsed;
-      }
-      ggLog(cError('✗ $error'));
-      seed = edited;
-    }
-    throw Exception(
-      cError(
-        'The commit message is still invalid after $_maxMessageAttempts '
-        'attempts.',
-      ),
-    );
+    final edited = (await _editMessage(proposal.text) ?? '').trim();
+    return gg.CommitMessage.parse(edited.isEmpty ? proposal.text : edited);
   }
-
-  /// How often the editor re-opens on an invalid message before giving up —
-  /// enough for a correction, few enough that a piped stdin cannot spin.
-  static const int _maxMessageAttempts = 3;
 
   /// Opens the shared message editor for the commit message.
   // coverage:ignore-start

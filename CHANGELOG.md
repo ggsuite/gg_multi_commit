@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.6.0 - 2026-10-06
+
+### Changed
+
+- Allow commit messages with a first line of any length
+
 ## 4.5.0 - 2026-09-30
 
 ### Changed
