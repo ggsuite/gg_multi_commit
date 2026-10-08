@@ -15,6 +15,8 @@ import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 
+import '../../test_helpers.dart';
+
 class MockGgCanCommit extends Mock implements gg.CanCommit {}
 
 class MockGgDoCommit extends Mock implements gg.DoCommit {}
@@ -138,6 +140,7 @@ void main() {
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggCanCommit: mockGgCanCommit,
             ggDoCommit: mockGgDoCommit,
           ),
@@ -150,6 +153,91 @@ void main() {
         'Test commit',
       ]);
       expect(messages[1].split('\n'), ['', 'A']);
+    });
+
+    test('localizes a hand-added dependency and commits gg\'s part of it '
+        'before the user\'s commit', () async {
+      final sampleTicket = await createSampleTicket(tempDir);
+      final a = sampleRepo(sampleTicket, 'a');
+      await addDependency(a, 'b');
+
+      // What each repo looked like when the user's commit was asked for.
+      final seen = <String, Map<String, List<String>>>{};
+      final ggDoCommit = MockGgDoCommit();
+      when(
+        () => ggDoCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          logType: any(named: 'logType'),
+          updateChangeLog: any(named: 'updateChangeLog'),
+          force: any(named: 'force'),
+        ),
+      ).thenAnswer((invocation) async {
+        final repo = invocation.namedArguments[#directory] as Directory;
+        seen[path.basename(repo.path)] = {
+          'commits': await commitSubjects(repo),
+          'dirty': await dirtyFiles(repo),
+        };
+      });
+
+      final runner = CommandRunner<void>('test', 'do commit ticket')
+        ..addCommand(DoCommitCommand(ggLog: ggLog, ggDoCommit: ggDoCommit));
+      await runner.run([
+        'commit',
+        '--input',
+        sampleTicket.path,
+        '--message',
+        'Use b',
+      ]);
+
+      expect(messages, contains('✓ Localized the references of a'));
+      expect(seen['a'], {
+        'commits': ['#gg: changed references to path'],
+        'dirty': ['pubspec.yaml'],
+      });
+      expect(seen['b'], {'commits': <String>[], 'dirty': <String>[]});
+    });
+
+    test('commits and warns once when a repo is missing between the '
+        'ticket repos', () async {
+      // a reaches its ticket sibling b only through the ocean's c.
+      final sampleTicket = await createSampleTicket(tempDir);
+      final a = sampleRepo(sampleTicket, 'a');
+      await addDependency(a, 'c');
+      addOceanRepo(tempDir, 'c', 'b');
+      final ggDoCommit = MockGgDoCommit();
+      when(
+        () => ggDoCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          logType: any(named: 'logType'),
+          updateChangeLog: any(named: 'updateChangeLog'),
+          force: any(named: 'force'),
+        ),
+      ).thenAnswer((_) async {});
+
+      final runner = CommandRunner<void>('test', 'do commit ticket')
+        ..addCommand(DoCommitCommand(ggLog: ggLog, ggDoCommit: ggDoCommit));
+      await runner.run(['commit', '--input', sampleTicket.path, '-m', 'Use c']);
+
+      expect(
+        messages.where((m) => m.contains('Repos between the ticket repos')),
+        hasLength(1),
+      );
+      expect(messages, contains('Run gg do add c to add them.\n'));
+      expect(messages.last, '\nAll repos committed\n');
+      verify(
+        () => ggDoCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Use c',
+          logType: any(named: 'logType'),
+          updateChangeLog: any(named: 'updateChangeLog'),
+          force: any(named: 'force'),
+        ),
+      ).called(2);
     });
 
     test('aborts on first repo that fails', () async {
@@ -183,6 +271,7 @@ void main() {
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggCanCommit: mockGgCanCommit,
             ggDoCommit: mockGgDoCommit,
           ),
@@ -219,6 +308,7 @@ void main() {
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggDoCommit: recordingDoCommit(),
             editMessage: edit ?? editMessage(),
           ),
@@ -313,6 +403,7 @@ void main() {
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggDoCommit: recordingDoCommit(),
             editMessage: editMessage(),
           ),
@@ -326,6 +417,7 @@ void main() {
     test('exec forwards the message without offering an edit', () async {
       final command = DoCommitCommand(
         ggLog: ggLog,
+        ticketLocalizer: inSyncTicketLocalizer(),
         ggDoCommit: recordingDoCommit(),
         editMessage: editMessage(),
       );
@@ -360,6 +452,7 @@ void main() {
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggDoCommit: recordingDoCommit(),
             editMessage: edit ?? editMessage(),
           ),
@@ -454,6 +547,7 @@ void main() {
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggDoCommit: failing,
             editMessage: editMessage(),
           ),

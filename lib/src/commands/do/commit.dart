@@ -28,9 +28,11 @@ class DoCommitCommand extends DirCommand<void> {
     gg.DoCommit? ggDoCommit,
     SortedProcessingList? sortedProcessingList,
     EditMessage? editMessage,
+    TicketLocalizer? ticketLocalizer,
   }) : _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
+       _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
        _editMessage = editMessage ?? _defaultEditMessage {
     _addArgs();
   }
@@ -45,6 +47,9 @@ class DoCommitCommand extends DirCommand<void> {
 
   /// Opens an interactive editor for the commit message.
   final EditMessage _editMessage;
+
+  /// Localizes references the user added by hand before committing.
+  final TicketLocalizer _ticketLocalizer;
 
   @override
   Future<void> exec({
@@ -99,6 +104,13 @@ class DoCommitCommand extends DirCommand<void> {
       ggLog(cWarn('⚠️ No repos in this ticket'));
       return;
     }
+
+    // Hand-added deps are localized; only gg's own files are committed here.
+    await _ticketLocalizer.localizeUnlocalized(
+      ticketDir: ticketDir,
+      repos: nodes,
+      ggLog: ggLog,
+    );
 
     // A repo whose publish_config.json proposes its own message is asked
     // separately; everything else shares the one message the ticket resolves

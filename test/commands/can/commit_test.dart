@@ -14,6 +14,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
 import 'package:test/test.dart';
 
+import '../../test_helpers.dart';
+
 class MockGgCanCommit extends Mock implements gg.CanCommit {}
 
 class MockGgDidCommit extends Mock implements gg.DidCommit {}
@@ -116,6 +118,7 @@ void main() {
         ..addCommand(
           CanCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggCanCommit: mockCanCommit(),
             ggDidCommit: mockDidCommit(false),
           ),
@@ -132,6 +135,7 @@ void main() {
         ..addCommand(
           CanCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggCanCommit: mockCanCommit(),
             ggDidCommit: mockDidCommit(true),
           ),
@@ -150,6 +154,7 @@ void main() {
         ..addCommand(
           CanCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggCanCommit: mockGgCanCommit,
             ggDidCommit: mockDidCommit(false),
           ),
@@ -168,6 +173,76 @@ void main() {
       expect(forced, [true, true]);
     });
 
+    test('refuses unlocalized references before checking any repo', () async {
+      final sampleTicket = await createSampleTicket(tempDir);
+      await addDependency(sampleRepo(sampleTicket, 'a'), 'b', commit: true);
+      final ggCanCommit = mockCanCommit();
+
+      final runner = CommandRunner<void>('test', 'can commit ticket')
+        ..addCommand(
+          CanCommitCommand(
+            ggLog: ggLog,
+            ggCanCommit: ggCanCommit,
+            ggDidCommit: mockDidCommit(false),
+          ),
+        );
+      await expectLater(
+        () async => await runner.run(['commit', '--input', sampleTicket.path]),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls('$e'),
+            'message',
+            'Exception: References not localized in a.',
+          ),
+        ),
+      );
+      expect(messages, [
+        '\na',
+        '✗ a uses the published b instead of its checkout',
+        '\nPlease run gg do localize '
+            '(or gg do commit, which localizes itself).\n',
+      ]);
+      verifyNever(
+        () => ggCanCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      );
+    });
+
+    test('only warns about a repo missing between the ticket repos', () async {
+      // a reaches its ticket sibling b only through the ocean's c.
+      final sampleTicket = await createSampleTicket(tempDir);
+      await addDependency(sampleRepo(sampleTicket, 'a'), 'c', commit: true);
+      addOceanRepo(tempDir, 'c', 'b');
+      final ggCanCommit = mockCanCommit();
+
+      final runner = CommandRunner<void>('test', 'can commit ticket')
+        ..addCommand(
+          CanCommitCommand(
+            ggLog: ggLog,
+            ggCanCommit: ggCanCommit,
+            ggDidCommit: mockDidCommit(false),
+          ),
+        );
+      await runner.run(['commit', '--input', sampleTicket.path]);
+
+      expect(messages.take(3), [
+        '\n⚠️ Repos between the ticket repos, but not in it:',
+        '  - c',
+        'Run gg do add c to add them.\n',
+      ]);
+      expect(messages.last, '\nAll repos can be committed\n');
+      verify(
+        () => ggCanCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      ).called(2);
+    });
+
     test('aborts on first repo that fails', () async {
       final mockGgCanCommit = mockCanCommit((invocation) async {
         final repoDir = invocation.namedArguments[#directory] as Directory;
@@ -180,6 +255,7 @@ void main() {
         ..addCommand(
           CanCommitCommand(
             ggLog: ggLog,
+            ticketLocalizer: inSyncTicketLocalizer(),
             ggCanCommit: mockGgCanCommit,
             ggDidCommit: mockDidCommit(false),
           ),

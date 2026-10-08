@@ -353,6 +353,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.2"
+  gg_localize_refs:
+    dependency: "direct overridden"
+    description:
+      path: "../gg_localize_refs"
+      relative: true
+    source: path
+    version: "5.0.3"
   gg_log:
     dependency: "direct main"
     description:
