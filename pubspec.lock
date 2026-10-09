@@ -382,7 +382,7 @@ packages:
       path: "../gg_multi_core"
       relative: true
     source: path
-    version: "4.9.2"
+    version: "4.9.3"
   gg_one:
     dependency: "direct main"
     description:
