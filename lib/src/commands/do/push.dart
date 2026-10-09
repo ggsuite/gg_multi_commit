@@ -47,22 +47,25 @@ class MergeConflictException implements Exception {
 /// 1. All repos must be committed (checked via gg_git's `IsCommitted`).
 /// 2. The remote default branch is merged into every feature branch, so the
 ///    pushed state always contains the current default branch.
-/// 3. The dependencies of every repo are upgraded
+/// 3. References the merge left unlocalized (a new edge between two ticket
+///    repos) are localized and committed as `#gg:` commits. A repo the
+///    merge put between two ticket repos is only a warning (step 5's).
+/// 4. The dependencies of every repo are upgraded
 ///    (»dart pub upgrade [--major-versions] --tighten«). `--no-upgrade`
 ///    skips this step — `do publish`'s ticket-wide checks do so, because
 ///    the publish upgrades every repo again right before it is published.
-/// 4. `gg can commit` re-verifies every repo — merge and upgrade bring in
+/// 5. `gg can commit` re-verifies every repo — merge and upgrade bring in
 ///    changes, so the checks only make sense after them. Their output stays
 ///    visible on the command line.
-/// 5. What the upgrade changed is recorded as a `#gg:` system commit
+/// 6. What the upgrade changed is recorded as a `#gg:` system commit
 ///    (no CHANGELOG entry).
-/// 6. Commits that already exist on the remote feature branch are integrated
+/// 7. Commits that already exist on the remote feature branch are integrated
 ///    (`git pull --rebase`; an obsolete leftover branch of an already merged
 ///    ticket is replaced instead — see [_remoteBranchIsObsolete]), and every
 ///    repo is pushed via gg_one's `gg do push`.
-/// 7. The ticket hash is stored as `doPush` in `<ticket>/.gg.json`.
+/// 8. The ticket hash is stored as `doPush` in `<ticket>/.gg.json`.
 ///
-/// **A state that was pushed already is skipped.** Step 7's hash is read
+/// **A state that was pushed already is skipped.** Step 8's hash is read
 /// before step 1, so a second `gg do push` on an unchanged ticket returns
 /// right away instead of merging the default branch, upgrading and
 /// verifying again — the
@@ -87,8 +90,10 @@ class DoPushCommand extends DirCommand<void> {
     gg_publish.MainBranch? mainBranch,
     TicketState? ticketState,
     gg.GgState? ggState,
+    TicketLocalizer? ticketLocalizer,
     this._gitRetry = const GitRetry(),
-  }) : _ticketState = ticketState ?? TicketState(ggLog: ggLog),
+  }) : _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
+       _ticketState = ticketState ?? TicketState(ggLog: ggLog),
        _ggState = ggState ?? gg.GgState(ggLog: ggLog),
        _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
        _systemCommit = systemCommit ?? gg.GgSystemCommit(ggLog: ggLog),
@@ -108,6 +113,9 @@ class DoPushCommand extends DirCommand<void> {
 
   /// Caches successful runs at ticket level.
   final TicketState _ticketState;
+
+  /// Localizes the references a merged default branch brought in.
+  final TicketLocalizer _ticketLocalizer;
 
   /// Instance of gg DoPush to perform the push action
   final gg.DoPush _ggDoPush;
@@ -253,6 +261,16 @@ class DoPushCommand extends DirCommand<void> {
     ).run(
       () async =>
           _mergeMainIntoRepos(nodes: nodes, ggLog: taskLog, errorLog: ggLog),
+    );
+
+    // A merged default branch can bring in a new edge between ticket repos.
+    // Silent when in sync; a status line would overwrite what it reports.
+    // Missing repos are left to `can commit` below, which warns once.
+    await _ticketLocalizer.localizeUnlocalized(
+      ticketDir: ticketDir,
+      repos: nodes,
+      ggLog: ggLog,
+      warnMissingRepos: false,
     );
 
     // The merge brings the manifests of the default branch into the feature

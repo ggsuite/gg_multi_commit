@@ -26,10 +26,12 @@ class CanCommitCommand extends DirCommand<void> {
     gg.CanCommit? ggCanCommit,
     gg.DidCommit? ggDidCommit,
     SortedProcessingList? sortedProcessingList,
+    TicketLocalizer? ticketLocalizer,
   }) : _ggCanCommit = ggCanCommit ?? gg.CanCommit(ggLog: ggLog),
        _ggDidCommit = ggDidCommit ?? gg.DidCommit(ggLog: ggLog),
        _sortedProcessingList =
-           sortedProcessingList ?? SortedProcessingList(ggLog: ggLog) {
+           sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
+       _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog) {
     _addArgs();
   }
 
@@ -41,6 +43,9 @@ class CanCommitCommand extends DirCommand<void> {
 
   /// Sorted processing list for repos
   final SortedProcessingList _sortedProcessingList;
+
+  /// Tells whether the references between the ticket repos are localized.
+  final TicketLocalizer _ticketLocalizer;
 
   @override
   Future<void> exec({
@@ -78,6 +83,13 @@ class CanCommitCommand extends DirCommand<void> {
       ggLog(cWarn('⚠️ No repos in this ticket'));
       return;
     }
+
+    // A hand-added dependency would otherwise test the published package.
+    await _ticketLocalizer.throwWhenOutOfSync(
+      ticketDir: ticketDir,
+      repos: nodes,
+      ggLog: ggLog,
+    );
 
     // Iterate over each repository and check if it can be committed
     var allCommitted = true;

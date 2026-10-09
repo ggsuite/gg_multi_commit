@@ -12,7 +12,8 @@ import 'package:gg_git/gg_git.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
-import 'package:gg_multi_core/gg_multi_core.dart' show MockTicketState;
+import 'package:gg_multi_core/gg_multi_core.dart'
+    show MockTicketState, TicketLocalizer;
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_publish/gg_publish.dart' as gg_publish;
@@ -22,9 +23,15 @@ import 'package:path/path.dart' as path;
 import 'package:pubspec_parse/pubspec_parse.dart';
 import 'package:test/test.dart';
 
+import '../../test_helpers.dart';
+
 class MockGgDoPush extends Mock implements gg.DoPush {}
 
 class MockGgSystemCommit extends Mock implements gg.GgSystemCommit {}
+
+class MockGgCanCommit extends Mock implements gg.CanCommit {}
+
+class MockGgDidCommit extends Mock implements gg.DidCommit {}
 
 class MockMainBranch extends Mock implements gg_publish.MainBranch {}
 
@@ -245,6 +252,8 @@ void main() {
   PushTestBed makeCommand({
     List<String> repos = const ['A', 'B'],
     bool wasPushed = false,
+    TicketLocalizer? ticketLocalizer,
+    CanCommitCommand? canCommit,
   }) {
     final git = MockProcessRunner();
     stubBaseGit(git);
@@ -346,12 +355,13 @@ void main() {
       systemCommit: systemCommit,
       isCommitted: isCommitted,
       upgradeDependencies: upgradeDeps,
-      canCommit: canCommitCmd,
+      canCommit: canCommit ?? canCommitCmd,
       sortedProcessingList: sortedProcessingList,
       processRunner: git.call,
       mainBranch: mainBranch,
       ticketState: ticketState,
       ggState: ggState,
+      ticketLocalizer: ticketLocalizer ?? inSyncTicketLocalizer(),
       gitRetry: GitRetry.example,
     );
 
@@ -514,6 +524,7 @@ void main() {
         processRunner: bed.git.call,
         mainBranch: bed.mainBranch,
         ticketState: bed.ticketState,
+        ticketLocalizer: inSyncTicketLocalizer(),
       );
 
       await command.get(
@@ -698,6 +709,113 @@ void main() {
           force: any(named: 'force'),
         ),
       );
+    });
+  });
+
+  group('DoPushCommand localization', () {
+    test('localizes an edge the merged default branch brought in, before '
+        'the dependencies are resolved', () async {
+      ticketDir = await createSampleTicket(tempDir);
+      final a = sampleRepo(ticketDir, 'a');
+      final overrides = File(path.join(a.path, 'pubspec_overrides.yaml'));
+      final bed = makeCommand(
+        repos: ['b', 'a'],
+        ticketLocalizer: TicketLocalizer(ggLog: ggLog),
+      );
+
+      // The default branch of a gained a dependency on b.
+      when(
+        () => bed.git('git', [
+          'merge',
+          '-m',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
+          'origin/main',
+        ], workingDirectory: a.path),
+      ).thenAnswer((_) async {
+        expect(overrides.existsSync(), isFalse);
+        await addDependency(a, 'b', commit: true);
+        return ProcessResult(0, 0, '', '');
+      });
+
+      // The resolution after the merge already sees the localized refs.
+      final localizedAtPubGet = <bool>[];
+      when(() => bed.git('dart', ['pub', 'get'], workingDirectory: a.path))
+          .thenAnswer((_) async {
+            localizedAtPubGet.add(overrides.existsSync());
+            return ProcessResult(0, 0, '', '');
+          });
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+      expect(localizedAtPubGet, [true]);
+      expect(await commitSubjects(a), [
+        '#gg: changed references to path',
+        'Add b',
+      ]);
+      expect(await dirtyFiles(a), isEmpty);
+      expect(await commitSubjects(sampleRepo(ticketDir, 'b')), isEmpty);
+    });
+  });
+
+  group('DoPushCommand missing repos', () {
+    test('warns once and pushes when the merge put a repo between two '
+        'ticket repos', () async {
+      ticketDir = await createSampleTicket(tempDir);
+      final a = sampleRepo(ticketDir, 'a');
+      addOceanRepo(tempDir, 'c', 'b');
+      final ggCanCommit = MockGgCanCommit();
+      when(
+        () => ggCanCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      ).thenAnswer((_) async {});
+      final ggDidCommit = MockGgDidCommit();
+      when(
+        () => ggDidCommit.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenAnswer((_) async => true);
+      final bed = makeCommand(
+        repos: ['b', 'a'],
+        ticketLocalizer: TicketLocalizer(ggLog: ggLog),
+        // The real ticket-level check, as push wires it.
+        canCommit: CanCommitCommand(
+          ggLog: ggLog,
+          ggCanCommit: ggCanCommit,
+          ggDidCommit: ggDidCommit,
+        ),
+      );
+
+      // The default branch of a gained a dependency on the ocean's c.
+      when(
+        () => bed.git('git', [
+          'merge',
+          '-m',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
+          'origin/main',
+        ], workingDirectory: a.path),
+      ).thenAnswer((_) async {
+        await addDependency(a, 'c', commit: true);
+        return ProcessResult(0, 0, '', '');
+      });
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+      expect(
+        messages.where((m) => m.contains('Repos between the ticket repos')),
+        hasLength(1),
+      );
+      expect(messages, contains('Run gg do add c to add them.\n'));
+      verify(
+        () => bed.ggDoPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      ).called(2);
     });
   });
 
@@ -1932,6 +2050,7 @@ void main() {
           processRunner: gitOnly,
           mainBranch: gg_publish.MainBranch(ggLog: ggLog),
           ticketState: bed.ticketState,
+          ticketLocalizer: inSyncTicketLocalizer(),
         );
 
         await runner(command)

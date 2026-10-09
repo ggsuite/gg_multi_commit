@@ -1,0 +1,6 @@
+name: b
+description: A package of the hand_added_dependency scenario.
+version: 1.0.0
+
+environment:
+  sdk: ^3.0.0
