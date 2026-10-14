@@ -5,6 +5,7 @@
 ### Changed
 
 - Localize hand-added dependencies in can commit, do commit and do push
+
 ## 4.6.2 - 2026-10-14
 
 ## 4.6.1 - 2026-10-06
