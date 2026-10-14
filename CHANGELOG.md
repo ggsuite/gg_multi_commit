@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.7.0 - 2026-10-14
+
+### Changed
+
+- Report unlocalized dependencies in can commit; localize them in do commit and do push
+
 ## 4.6.2 - 2026-10-14
 
 ## 4.6.1 - 2026-10-06
