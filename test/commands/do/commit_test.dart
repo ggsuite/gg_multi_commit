@@ -295,6 +295,44 @@ void main() {
         '\nPlease fix the issues above.\n',
       ]);
     });
+
+    test('commits no repo when the localization fails', () async {
+      final ggDoCommit = recordingDoCommit();
+      final runner = CommandRunner<void>('test', 'do commit ticket')
+        ..addCommand(
+          DoCommitCommand(
+            ggLog: ggLog,
+            ticketLocalizer: failingTicketLocalizer('Cannot localize A.'),
+            ggDoCommit: ggDoCommit,
+            editMessage: editMessage(),
+          ),
+        );
+
+      await expectLater(
+        () => runner.run(['commit', '--input', ticketDir.path]),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            'Exception: Cannot localize A.',
+          ),
+        ),
+      );
+
+      // Stopped before the message was asked for or any repo was committed.
+      expect(capturedInitials, isEmpty);
+      verifyNever(
+        () => ggDoCommit.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          logType: any(named: 'logType'),
+          updateChangeLog: any(named: 'updateChangeLog'),
+          force: any(named: 'force'),
+        ),
+      );
+      expect(messages, ['\nCommitting ...']);
+    });
   });
 
   group('commit message default from ticket.json', () {

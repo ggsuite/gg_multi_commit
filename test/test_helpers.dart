@@ -95,6 +95,22 @@ MockTicketLocalizer inSyncTicketLocalizer() {
 }
 
 // .............................................................................
+/// A [TicketLocalizer] whose localization fails with [message], so the tests
+/// can check that a flow stops before it touches any repo.
+MockTicketLocalizer failingTicketLocalizer(String message) {
+  final localizer = inSyncTicketLocalizer();
+  when(
+    () => localizer.localizeUnlocalized(
+      ticketDir: any(named: 'ticketDir'),
+      repos: any(named: 'repos'),
+      ggLog: any(named: 'ggLog'),
+      warnMissingRepos: any(named: 'warnMissingRepos'),
+    ),
+  ).thenThrow(Exception(message));
+  return localizer;
+}
+
+// .............................................................................
 /// Puts the repo [name] depending on [dependency] into the ocean next to the
 /// tickets of [tempDir], so it lies between two ticket repos.
 void addOceanRepo(Directory tempDir, String name, String dependency) {

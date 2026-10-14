@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Localize hand-added dependencies in can commit, do commit and do push
+- Report unlocalized dependencies in can commit; localize them in do commit and do push
 
 ## 4.6.2 - 2026-10-14
 

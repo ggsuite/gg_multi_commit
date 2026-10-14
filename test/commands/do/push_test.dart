@@ -1469,6 +1469,47 @@ void main() {
       );
     });
 
+    test('aborts before pushing when the localization fails', () async {
+      final bed = makeCommand(
+        repos: ['A'],
+        ticketLocalizer: failingTicketLocalizer('Cannot localize A.'),
+      );
+
+      await expectLater(
+        () async =>
+            await runner(bed.command).run(['push', '--input', ticketDir.path]),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            'Exception: Cannot localize A.',
+          ),
+        ),
+      );
+
+      verifyNever(
+        () => bed.upgradeDeps.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          majorVersions: any(named: 'majorVersions'),
+        ),
+      );
+      verifyNever(
+        () => bed.ggDoPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      );
+      verifyNever(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: any(named: 'key'),
+        ),
+      );
+    });
+
     test('aborts before pushing when can commit fails', () async {
       final bed = makeCommand(repos: ['A']);
 
