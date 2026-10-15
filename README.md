@@ -24,9 +24,19 @@ lives in `gg_multi_core`.
 | `did push`               | report which repos have new pushed commits                                          |
 | `did review`             | report whether the current ticket state was reviewed                                |
 
+Hand-added dependencies between ticket repos are kept localized:
+`can commit` refuses a ticket whose references are out of sync (and tells
+you to run `gg do localize`), `do commit` localizes them first and commits
+gg's own override/lock changes as a `#gg:` commit — your manifest edit
+stays in your own commit — and `do push` localizes whatever the merged main
+branch brought in. A ticket in sync is left untouched. A repo of the ocean
+that lies between two ticket repos but is missing in the ticket is a
+warning, never a stop: run `gg do add <repo>`.
+
 `do push` is the single way a ticket reaches the remote: it checks for
 uncommitted changes, merges the remote main into every feature branch,
-resolves and upgrades the dependencies, re-verifies with `can commit`,
+localizes new references, resolves and upgrades the dependencies,
+re-verifies with `can commit`,
 records the upgrade as a `#gg:` system commit, integrates the remote
 feature branch (recognizing obsolete branches left over from squash
 merges) and pushes every repo. The ticket hash is recorded as `doPush`, so a
