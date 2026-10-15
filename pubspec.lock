@@ -351,12 +351,11 @@ packages:
     source: path
     version: "4.2.2"
   gg_localize_refs:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_localize_refs
-      sha256: e801646847a2f00ff53d33faeb21c4124aba416852fe4781c750d93b8367129c
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_localize_refs"
+      relative: true
+    source: path
     version: "5.1.0"
   gg_log:
     dependency: "direct main"
