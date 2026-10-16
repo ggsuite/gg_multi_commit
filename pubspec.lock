@@ -388,50 +388,44 @@ packages:
   gg_multi_core:
     dependency: "direct main"
     description:
-      name: gg_multi_core
-      sha256: "880212f0f50074b7fe72d427a4e9e869e3889fa1ba1134b759abfd7f857d8f2e"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_multi_core"
+      relative: true
+    source: path
     version: "4.10.1"
   gg_one:
     dependency: "direct main"
     description:
-      name: gg_one
-      sha256: fa5da4ac6cb58d8ef7dd31536dd0e68e7d8fbba885abbbaa10e9ea09c95c8c07
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one"
+      relative: true
+    source: path
     version: "14.4.10"
   gg_one_commit:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_commit
-      sha256: "9643c89a80e61ee282ea54b0215fdcbf37da8c4531664ab29b3287f379edc0e8"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_commit"
+      relative: true
+    source: path
     version: "2.8.5"
   gg_one_core:
     dependency: "direct main"
     description:
-      name: gg_one_core
-      sha256: "25abedaf4ef885ed21f203aeb1f0c061cc8c00d181a28c296c6de3a06783c19f"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_core"
+      relative: true
+    source: path
     version: "2.13.1"
   gg_one_do_publish:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_do_publish
-      sha256: "8c33c2bf2cd922e81818bb74e6436cdc5a005e90386f755813649bab19a9a60c"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_do_publish"
+      relative: true
+    source: path
     version: "2.11.6"
   gg_one_merge:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_one_merge
-      sha256: "128a6c8e3885515af4d657a68b53e55d3e221d6143742f8f5fd7afcc067ebe30"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_one_merge"
+      relative: true
+    source: path
     version: "2.7.7"
   gg_process:
     dependency: transitive
