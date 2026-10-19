@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.7.2 - 2026-10-19
+
+### Changed
+
+- Mention both streams in the review test
+
 ## 4.7.1 - 2026-10-16
 
 ## 4.7.0 - 2026-10-14

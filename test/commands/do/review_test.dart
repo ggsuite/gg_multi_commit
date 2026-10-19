@@ -1134,7 +1134,7 @@ void main() {
     });
 
     test('never fails the review when no question can be answered', () async {
-      // stdin is no terminal: `gg do publish` will ask instead — the review
+      // No terminal to ask on: `gg do publish` will ask instead — the review
       // still filters the pull requests and records itself.
       final bed = makeCommand(hasTerminal: false);
 
