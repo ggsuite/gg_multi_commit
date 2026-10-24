@@ -19,7 +19,18 @@ import '../../test_helpers.dart';
 
 class MockGgCanCommit extends Mock implements gg.CanCommit {}
 
-class MockGgDoCommit extends Mock implements gg.DoCommit {}
+/// A [gg.DoCommit] whose repos all have something to commit.
+class MockGgDoCommit extends Mock implements gg.DoCommit {
+  MockGgDoCommit() {
+    when(
+      () => needsMessage(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+        force: any(named: 'force'),
+      ),
+    ).thenAnswer((_) async => true);
+  }
+}
 
 class FakeDirectory extends Fake implements Directory {}
 
@@ -31,6 +42,7 @@ void main() {
   final committedMessages = <String?>[];
   final capturedInitials = <String>[];
   final committedForces = <bool?>[];
+  final needsMessageForces = <bool?>[];
 
   setUpAll(() {
     registerFallbackValue(FakeDirectory());
@@ -38,9 +50,27 @@ void main() {
 
   void ggLog(String msg) => messages.add(rmControls(msg));
 
-  /// A [gg.DoCommit] stub recording the message it was called with.
-  MockGgDoCommit recordingDoCommit() {
+  /// A [gg.DoCommit] stub recording the message it was called with. The
+  /// repos named in [committed] have nothing to commit, those in [unknown]
+  /// cannot tell.
+  MockGgDoCommit recordingDoCommit({
+    Set<String> committed = const {},
+    Set<String> unknown = const {},
+  }) {
     final mock = MockGgDoCommit();
+    when(
+      () => mock.needsMessage(
+        directory: any(named: 'directory'),
+        ggLog: any(named: 'ggLog'),
+        force: any(named: 'force'),
+      ),
+    ).thenAnswer((invocation) async {
+      final directory = invocation.namedArguments[#directory] as Directory;
+      final name = path.basename(directory.path);
+      needsMessageForces.add(invocation.namedArguments[#force] as bool?);
+      if (unknown.contains(name)) throw Exception('No state of $name');
+      return !committed.contains(name);
+    });
     when(
       () => mock.exec(
         directory: any(named: 'directory'),
@@ -69,6 +99,7 @@ void main() {
     committedMessages.clear();
     capturedInitials.clear();
     committedForces.clear();
+    needsMessageForces.clear();
     tempDir = Directory.systemTemp.createTempSync('do_commit_ticket_test_');
     ticketsDir = Directory(path.join(tempDir.path, 'tickets'))..createSync();
     ticketDir = Directory(path.join(ticketsDir.path, 'TICKC'))..createSync();
@@ -341,13 +372,18 @@ void main() {
       String? message,
       EditMessage? edit,
       List<String> args = const [],
+      Set<String> committed = const {},
+      Set<String> unknown = const {},
     }) async {
       final runner = CommandRunner<void>('test', 'do commit ticket')
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
             ticketLocalizer: inSyncTicketLocalizer(),
-            ggDoCommit: recordingDoCommit(),
+            ggDoCommit: recordingDoCommit(
+              committed: committed,
+              unknown: unknown,
+            ),
             editMessage: edit ?? editMessage(),
           ),
         );
@@ -372,6 +408,40 @@ void main() {
       committedForces.clear();
       await run(message: 'Msg', args: ['-f']);
       expect(committedForces, [true, true]);
+    });
+
+    test('asks whether a repo needs a message with --force', () async {
+      await run(message: 'Msg', args: ['--force']);
+      expect(needsMessageForces, [true, true]);
+    });
+
+    test('asks no message when no repo has something to commit', () async {
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
+
+      await run(committed: {'A', 'B'});
+
+      expect(capturedInitials, isEmpty);
+      expect(committedMessages, [null, null]);
+    });
+
+    test('asks the message once one repo has something to commit', () async {
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
+
+      await run(committed: {'A'});
+
+      expect(capturedInitials, ['Ticket desc']);
+      expect(committedMessages, ['Ticket desc', 'Ticket desc']);
+    });
+
+    test('asks the message for a repo that cannot tell', () async {
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
+
+      await run(committed: {'B'}, unknown: {'A'});
+
+      expect(capturedInitials, ['Ticket desc']);
     });
 
     test('reuses the ticket description when no message is given', () async {
@@ -485,13 +555,17 @@ void main() {
       ),
     ).save(file: gg.repoPublishConfigFile(repo(name)));
 
-    Future<void> run({String? message, EditMessage? edit}) async {
+    Future<void> run({
+      String? message,
+      EditMessage? edit,
+      Set<String> committed = const {},
+    }) async {
       final runner = CommandRunner<void>('test', 'do commit ticket')
         ..addCommand(
           DoCommitCommand(
             ggLog: ggLog,
             ticketLocalizer: inSyncTicketLocalizer(),
-            ggDoCommit: recordingDoCommit(),
+            ggDoCommit: recordingDoCommit(committed: committed),
             editMessage: edit ?? editMessage(),
           ),
         );
@@ -525,6 +599,36 @@ void main() {
 
       expect(capturedInitials, ['A change', 'B change']);
       expect(committedMessages, ['A change', 'B change']);
+    });
+
+    test('asks no message of a repo with nothing to commit and records '
+        'none', () async {
+      // A was committed in an earlier run; only B has something to commit.
+      await proposeIn('A', firstLine: 'A change');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run(committed: {'A'});
+
+      expect(capturedInitials, ['B change']);
+      expect(committedMessages, [null, 'B change']);
+      expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
+      expect(
+        gg.RepoPublishConfig.tryLoad(repo('B'))!.commits.single.firstLine,
+        'B change',
+      );
+    });
+
+    test('records no message of a committed repo given by -m', () async {
+      await proposeIn('A', firstLine: 'A change');
+      await proposeIn('B', firstLine: 'B change');
+
+      await run(message: 'From the flag', committed: {'A'});
+
+      expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
+      expect(
+        gg.RepoPublishConfig.tryLoad(repo('B'))!.commits.single.firstLine,
+        'From the flag',
+      );
     });
 
     test('commits the details as the message body', () async {

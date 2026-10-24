@@ -127,12 +127,33 @@ class DoCommitCommand extends DirCommand<void> {
       }
     }
 
+    // A repo with nothing to commit is asked for no message and records
+    // none: its prompt would only repeat what was committed already. A repo
+    // that cannot answer is asked, so that its commit reports the error.
+    final needsMessage = <String, bool>{};
+    for (final node in nodes) {
+      final repoName = path.basename(node.directory.path);
+      try {
+        needsMessage[repoName] = await _ggDoCommit.needsMessage(
+          directory: node.directory,
+          ggLog: ggLog,
+          force: force,
+        );
+      } catch (_) {
+        needsMessage[repoName] = true;
+      }
+    }
+
     // Without an explicit -m the ticket description becomes the commit
     // message — offered in the same editor `do publish` uses for its merge
-    // messages, so it can be adjusted before it is applied to every repo.
-    final shared = proposals.length == nodes.length
-        ? null
-        : await _resolveMessage(message: message, ticketDir: ticketDir);
+    // messages, so it can be adjusted before it is applied to every repo
+    // without a proposal of its own that has something to commit.
+    final sharedIsNeeded = needsMessage.entries.any(
+      (repo) => repo.value && !proposals.containsKey(repo.key),
+    );
+    final shared = sharedIsNeeded
+        ? await _resolveMessage(message: message, ticketDir: ticketDir)
+        : null;
 
     // Iterate over each repository and perform the commit
     final failedRepos = <String>[];
@@ -140,7 +161,7 @@ class DoCommitCommand extends DirCommand<void> {
       final repoDir = node.directory;
       final repoName = path.basename(repoDir.path);
       ggLog('\n${cH1(repoName)}');
-      final proposal = proposals[repoName];
+      final proposal = needsMessage[repoName]! ? proposals[repoName] : null;
       gg.CommitMessage? resolved;
       try {
         resolved = proposal == null

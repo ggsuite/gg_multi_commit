@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Ask no commit message of repos with nothing to commit
+
+gg do commit asks DoCommit.needsMessage for each repo before it prompts
+The shared message is asked only when a repo without a proposal needs it
+A repo with nothing to commit records no message in its publish config
+
 ## 4.7.2 - 2026-10-19
 
 ### Changed
