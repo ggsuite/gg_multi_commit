@@ -1359,7 +1359,7 @@ void main() {
         () => bed.systemCommit.commit(
           directory: captureAny(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          message: '#gg: dart pub upgrade --major-versions --tighten',
+          message: '#gg: dart pub upgrade --major-versions',
           userCommitMessage: any(named: 'userCommitMessage'),
           // The upgrade rewrote pubspec.yaml, so the recorded »everything is
           // committed« hash is stale — `can merge` reads it through
@@ -1424,7 +1424,7 @@ void main() {
         () => bed.systemCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          message: '#gg: dart pub upgrade --tighten',
+          message: '#gg: dart pub upgrade',
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
         ),

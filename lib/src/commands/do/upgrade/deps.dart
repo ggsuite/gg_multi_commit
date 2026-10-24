@@ -19,9 +19,15 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 /// Command to upgrade the dependencies of all repos in the current ticket.
 ///
 /// Runs gg_one’s `gg do upgrade deps` — i.e.
-/// »dart pub upgrade [--major-versions] --tighten« — in every ticket repo in
+/// »dart pub upgrade [--major-versions]« — in every ticket repo in
 /// dependency order. Validation happens afterwards, in the `gg can commit`
 /// step of the calling flow.
+///
+/// It never tightens the constraints. Inside a ticket `pubspec_overrides.yaml`
+/// points the siblings at their local checkouts, and »--tighten« would raise
+/// a lower bound to the overridden version while keeping the old upper bound
+/// — pub crashes on that range. `gg do publish` tightens instead, once the
+/// overrides are gone.
 class UpgradeDepsCommand extends DirCommand<void> {
   /// Constructor
   UpgradeDepsCommand({
@@ -93,6 +99,7 @@ class UpgradeDepsCommand extends DirCommand<void> {
           directory: repoDir,
           ggLog: ggLog,
           majorVersions: majorVersions,
+          tighten: false,
         );
       } catch (e) {
         ggLog(

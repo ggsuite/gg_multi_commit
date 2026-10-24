@@ -5,10 +5,11 @@
 ### Changed
 
 - Ask no commit message of repos with nothing to commit
+- Do not tighten dependency constraints in push and review
 
-gg do commit asks DoCommit.needsMessage for each repo before it prompts
-The shared message is asked only when a repo without a proposal needs it
-A repo with nothing to commit records no message in its publish config
+do upgrade deps passes tighten: false; gg do publish tightens instead
+The upgrade commit of do push reads #gg: dart pub upgrade --major-versions
+Upgrade the dependencies
 
 ## 4.7.2 - 2026-10-19
 
