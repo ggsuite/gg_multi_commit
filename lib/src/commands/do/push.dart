@@ -51,9 +51,12 @@ class MergeConflictException implements Exception {
 ///    repos) are localized and committed as `#gg:` commits. A repo the
 ///    merge put between two ticket repos is only a warning (step 5's).
 /// 4. The dependencies of every repo are upgraded
-///    (»dart pub upgrade [--major-versions] --tighten«). `--no-upgrade`
-///    skips this step — `do publish`'s ticket-wide checks do so, because
-///    the publish upgrades every repo again right before it is published.
+///    (»dart pub upgrade [--major-versions]«, without `--tighten`: the
+///    overrides point at the local checkouts, and pub crashes when it
+///    tightens against a sibling that is newer than the constraint; only
+///    the publish tightens). `--no-upgrade` skips this step — `do publish`'s
+///    ticket-wide checks do so, because the publish upgrades every repo
+///    again right before it is published.
 /// 5. `gg can commit` re-verifies every repo — merge and upgrade bring in
 ///    changes, so the checks only make sense after them. Their output stays
 ///    visible on the command line.
@@ -345,8 +348,8 @@ class DoPushCommand extends DirCommand<void> {
     // Without the upgrade phase only the post-merge `pub get` can have
     // changed something — name the commit after what actually ran.
     final message = upgrade
-        ? '${gg.ggCommitPrefix}dart pub upgrade '
-              '${majorVersions ? '--major-versions ' : ''}--tighten'
+        ? '${gg.ggCommitPrefix}dart pub upgrade'
+              '${majorVersions ? ' --major-versions' : ''}'
         : '${gg.ggCommitPrefix}dart pub get';
 
     for (final node in nodes) {
@@ -376,9 +379,9 @@ class DoPushCommand extends DirCommand<void> {
         ggLog: ggLog,
         message: message,
         userCommitMessage: gg.readTicketDescriptionForRepo,
-        // The upgrade tightened the constraints in pubspec.yaml, so the
-        // recorded »everything is committed« hash is stale — and `can merge`
-        // reads it through `did commit` right after this push.
+        // A major-version upgrade rewrites the constraints in pubspec.yaml,
+        // so the recorded »everything is committed« hash is stale — and
+        // `can merge` reads it through `did commit` right after this push.
         stateKey: gg.GgState.doCommitKey,
       );
     }

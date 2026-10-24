@@ -43,6 +43,12 @@ merges) and pushes every repo. The ticket hash is recorded as `doPush`, so a
 second run on an unchanged ticket returns right away — `--force` runs it
 anyway, `--git-force` is what force-pushes.
 
+`do push`, `do review` and `do upgrade deps` never tighten the dependency
+constraints (no `--tighten`): inside a ticket the overrides point at the
+local checkouts, and pub crashes when it tightens against a sibling that is
+newer than the constraint. `gg do publish` tightens them, once the
+references point at the registry again.
+
 `do review` runs `can review`, then `do push`, opens (or reuses) a pull
 request per repo — linking directly to the diff — and records the
 hash-based `didReview` flag that `gg do publish` requires. That flag also
