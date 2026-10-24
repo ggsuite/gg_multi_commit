@@ -39,6 +39,7 @@ void main() {
         directory: any(named: 'directory'),
         ggLog: any(named: 'ggLog'),
         majorVersions: any(named: 'majorVersions'),
+        tighten: any(named: 'tighten'),
       ),
     ).thenAnswer((invocation) async {
       final directory = invocation.namedArguments[#directory] as Directory;
@@ -97,8 +98,11 @@ void main() {
       expect(messages, contains('⚠️ No repos in this ticket'));
     });
 
-    test('upgrades all repos in order and forwards majorVersions: true '
-        'by default', () async {
+    // A ticket's overrides point at the local checkouts, and pub crashes
+    // when it tightens against a sibling newer than the constraint — so the
+    // ticket-wide upgrade never tightens; only the publish does.
+    test('upgrades all repos in order, forwards majorVersions: true '
+        'by default and never tightens', () async {
       final mock = upgradeStub();
       final runner = CommandRunner<void>('test', 'do upgrade dependencies')
         ..addCommand(UpgradeDepsCommand(ggLog: ggLog, ggDoUpgradeDeps: mock));
@@ -119,6 +123,7 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           majorVersions: true,
+          tighten: false,
         ),
       ).called(2);
     });
@@ -139,6 +144,7 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           majorVersions: false,
+          tighten: false,
         ),
       ).called(2);
     });
@@ -157,6 +163,7 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           majorVersions: false,
+          tighten: false,
         ),
       ).called(2);
     });
@@ -192,6 +199,7 @@ void main() {
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
           majorVersions: true,
+          tighten: false,
         ),
       ).called(2);
     });
