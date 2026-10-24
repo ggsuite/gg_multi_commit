@@ -16,7 +16,7 @@ lives in `gg_multi_core`.
 | `can commit [--force]`   | run `gg can commit` in every ticket repo (analyze + format + tests)                 |
 | `can push`               | check that every ticket repo is push-ready                                          |
 | `can review`             | check that every repo is on a feature branch and committed                          |
-| `do commit [-m <msg>]`   | commit every ticket repo with the same message (defaults to the ticket description) |
+| `do commit [-m <msg>]`   | commit every ticket repo with its proposed message or one shared message           |
 | `do push`                | merge the main branches into the feature branches, upgrade deps, verify and push    |
 | `do review`              | push, open a pull request per repo, print the urls and record the review            |
 | `do upgrade deps`        | upgrade the dependencies of every ticket repo in dependency order                   |
@@ -32,6 +32,11 @@ stays in your own commit — and `do push` localizes whatever the merged main
 branch brought in. A ticket in sync is left untouched. A repo of the ocean
 that lies between two ticket repos but is missing in the ticket is a
 warning, never a stop: run `gg do add <repo>`.
+
+`do commit` asks only the repos that have something to commit. A repo whose
+`.gg/publish_config.json` proposes a `nextCommitMessage` is asked on its own,
+with the proposal pre-filled; all other repos share one message, which
+starts from the ticket description. `-m` sets the message of every repo.
 
 `do push` is the single way a ticket reaches the remote: it checks for
 uncommitted changes, merges the remote main into every feature branch,

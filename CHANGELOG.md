@@ -2,14 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- Add the blog post of ticket gg-1
+
+Describe in the README how do commit picks the messages
+
 ### Changed
 
 - Ask no commit message of repos with nothing to commit
 - Do not tighten dependency constraints in push and review
-
-do upgrade deps passes tighten: false; gg do publish tightens instead
-The upgrade commit of do push reads #gg: dart pub upgrade --major-versions
-Upgrade the dependencies
 
 ## 4.7.2 - 2026-10-19
 
