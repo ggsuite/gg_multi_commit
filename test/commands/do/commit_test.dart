@@ -4,9 +4,11 @@
 // Use of this source code is governed by terms that can be
 // found in the LICENSE file in the root of this package.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:args/command_runner.dart';
+import 'package:gg_git/gg_git.dart' show IsCommitted;
 import 'package:gg_multi_commit/src/commands/do/commit.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_status_printer/gg_status_printer.dart';
@@ -17,11 +19,23 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 
 import '../../test_helpers.dart';
 
-class MockGgCanCommit extends Mock implements gg.CanCommit {}
-
 class MockGgDoCommit extends Mock implements gg.DoCommit {}
 
 class FakeDirectory extends Fake implements Directory {}
+
+class MockGgDidCommit extends Mock implements gg.DidCommit {}
+
+class MockEnsurePublishConfigIgnored extends Mock
+    implements gg.EnsurePublishConfigIgnored {}
+
+class MockIsCommitted extends Mock implements IsCommitted {}
+
+/// No editor: the messages are asked one by one, like before the sheet.
+Future<String?> noEditor({
+  required String prompt,
+  required String text,
+  required String fileName,
+}) async => null;
 
 void main() {
   late Directory tempDir;
@@ -31,6 +45,8 @@ void main() {
   final committedMessages = <String?>[];
   final capturedInitials = <String>[];
   final committedForces = <bool?>[];
+  late MockEnsurePublishConfigIgnored ensureIgnored;
+  late MockIsCommitted isCommitted;
 
   setUpAll(() {
     registerFallbackValue(FakeDirectory());
@@ -38,8 +54,13 @@ void main() {
 
   void ggLog(String msg) => messages.add(rmControls(msg));
 
-  /// A [gg.DoCommit] stub recording the message it was called with.
-  MockGgDoCommit recordingDoCommit() {
+  Directory repo(String name) => Directory(path.join(ticketDir.path, name));
+
+  /// A [gg.DoCommit] stub recording the message it was called with, then
+  /// running [answer] for the committed repo.
+  MockGgDoCommit stubDoCommit([
+    FutureOr<void> Function(Directory repo)? answer,
+  ]) {
     final mock = MockGgDoCommit();
     when(
       () => mock.exec(
@@ -53,9 +74,17 @@ void main() {
     ).thenAnswer((invocation) async {
       committedMessages.add(invocation.namedArguments[#message] as String?);
       committedForces.add(invocation.namedArguments[#force] as bool?);
+      await answer?.call(invocation.namedArguments[#directory] as Directory);
     });
     return mock;
   }
+
+  /// A [gg.DoCommit] stub failing for the repo named [failing].
+  MockGgDoCommit failingDoCommit(String failing) => stubDoCommit((repo) {
+    if (path.basename(repo.path) == failing) {
+      throw Exception('Failed to commit $failing');
+    }
+  });
 
   /// An [EditMessage] stub recording what it was shown and returning [result]
   /// (the unchanged initial message when [result] is null).
@@ -64,11 +93,63 @@ void main() {
     return result ?? initial;
   };
 
+  /// The command under test: no editor, a terminal, every repo has changes
+  /// and the `.gitignore` already hides the publish config — unless the
+  /// test says otherwise.
+  DoCommitCommand command({
+    gg.DoCommit? ggDoCommit,
+    TicketLocalizer? ticketLocalizer,
+    EditMessage? edit,
+    gg.EditText editText = noEditor,
+    bool hasTerminal = true,
+    gg.DidCommit? ggDidCommit,
+  }) => DoCommitCommand(
+    ggLog: ggLog,
+    editText: editText,
+    hasTerminal: () => hasTerminal,
+    ggDoCommit: ggDoCommit,
+    ticketLocalizer: ticketLocalizer,
+    editMessage: edit,
+    ggDidCommit: ggDidCommit,
+    ensureIgnored: ensureIgnored,
+    isCommitted: isCommitted,
+  );
+
+  /// Lets [isCommitted] answer [answer] for each repo by its name.
+  void stubIsCommitted(FutureOr<bool> Function(String repo) answer) =>
+      when(
+        () => isCommitted.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenAnswer(
+        (invocation) async => answer(
+          path.basename(
+            (invocation.namedArguments[#directory] as Directory).path,
+          ),
+        ),
+      );
+
+  /// Runs [cmd] in [dir] with [args].
+  Future<void> runCommand(
+    DoCommitCommand cmd,
+    Directory dir, [
+    List<String> args = const [],
+  ]) => (CommandRunner<void>(
+    'test',
+    'do commit ticket',
+  )..addCommand(cmd)).run(['commit', '--input', dir.path, ...args]);
+
   setUp(() {
     messages.clear();
     committedMessages.clear();
     capturedInitials.clear();
     committedForces.clear();
+    ensureIgnored = MockEnsurePublishConfigIgnored();
+    when(() => ensureIgnored.ensure(directory: any(named: 'directory')))
+        .thenAnswer((_) async => false);
+    isCommitted = MockIsCommitted();
+    stubIsCommitted((_) => false);
     tempDir = Directory.systemTemp.createTempSync('do_commit_ticket_test_');
     ticketsDir = Directory(path.join(tempDir.path, 'tickets'))..createSync();
     ticketDir = Directory(path.join(ticketsDir.path, 'TICKC'))..createSync();
@@ -87,10 +168,14 @@ void main() {
 
   group('DoCommitCommand (ticket-wide)', () {
     test('fails outside any ticket folder', () async {
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(DoCommitCommand(ggLog: ggLog));
+      // With the real collaborators: it stops before any of them is used.
+      final realCommand = DoCommitCommand(
+        ggLog: ggLog,
+        editText: noEditor,
+        hasTerminal: () => true,
+      );
       await expectLater(
-        () async => await runner.run(['commit', '--input', tempDir.path]),
+        () => runCommand(realCommand, tempDir),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -108,50 +193,19 @@ void main() {
     test('logs when there are no repositories', () async {
       final emptyTicket = Directory(path.join(ticketsDir.path, 'EMPTY'))
         ..createSync();
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(DoCommitCommand(ggLog: ggLog));
-      await runner.run(['commit', '--input', emptyTicket.path]);
+      await runCommand(command(), emptyTicket);
       expect(messages, contains('⚠️ No repos in this ticket'));
     });
 
     test('commits all repos successfully', () async {
-      final mockGgCanCommit = MockGgCanCommit();
-      final mockGgDoCommit = MockGgDoCommit();
-
-      when(
-        () => mockGgCanCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
+      await runCommand(
+        command(
+          ticketLocalizer: inSyncTicketLocalizer(),
+          ggDoCommit: stubDoCommit(),
         ),
-      ).thenAnswer((_) async {});
-
-      when(
-        () => mockGgDoCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      ).thenAnswer((_) async {});
-
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: inSyncTicketLocalizer(),
-            ggCanCommit: mockGgCanCommit,
-            ggDoCommit: mockGgDoCommit,
-          ),
-        );
-      await runner.run([
-        'commit',
-        '--input',
-        ticketDir.path,
-        '--message',
-        'Test commit',
-      ]);
+        ticketDir,
+        ['--message', 'Test commit'],
+      );
       expect(messages[1].split('\n'), ['', 'A']);
     });
 
@@ -163,30 +217,14 @@ void main() {
 
       // What each repo looked like when the user's commit was asked for.
       final seen = <String, Map<String, List<String>>>{};
-      final ggDoCommit = MockGgDoCommit();
-      when(
-        () => ggDoCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      ).thenAnswer((invocation) async {
-        final repo = invocation.namedArguments[#directory] as Directory;
+      final ggDoCommit = stubDoCommit((repo) async {
         seen[path.basename(repo.path)] = {
           'commits': await commitSubjects(repo),
           'dirty': await dirtyFiles(repo),
         };
       });
 
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(DoCommitCommand(ggLog: ggLog, ggDoCommit: ggDoCommit));
-      await runner.run([
-        'commit',
-        '--input',
-        sampleTicket.path,
+      await runCommand(command(ggDoCommit: ggDoCommit), sampleTicket, [
         '--message',
         'Use b',
       ]);
@@ -206,21 +244,11 @@ void main() {
       final a = sampleRepo(sampleTicket, 'a');
       await addDependency(a, 'c');
       addOceanRepo(tempDir, 'c', 'b');
-      final ggDoCommit = MockGgDoCommit();
-      when(
-        () => ggDoCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      ).thenAnswer((_) async {});
 
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(DoCommitCommand(ggLog: ggLog, ggDoCommit: ggDoCommit));
-      await runner.run(['commit', '--input', sampleTicket.path, '-m', 'Use c']);
+      await runCommand(command(ggDoCommit: stubDoCommit()), sampleTicket, [
+        '-m',
+        'Use c',
+      ]);
 
       expect(
         messages.where((m) => m.contains('Repos between the ticket repos')),
@@ -228,62 +256,19 @@ void main() {
       );
       expect(messages, contains('Run gg do add c to add them.\n'));
       expect(messages.last, '\nAll repos committed\n');
-      verify(
-        () => ggDoCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: 'Use c',
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      ).called(2);
+      expect(committedMessages, ['Use c', 'Use c']);
     });
 
     test('aborts on first repo that fails', () async {
-      final mockGgCanCommit = MockGgCanCommit();
-      final mockGgDoCommit = MockGgDoCommit();
-
-      when(
-        () => mockGgCanCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-        ),
-      ).thenAnswer((_) async {});
-
-      when(
-        () => mockGgDoCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      ).thenAnswer((invocation) async {
-        final repoDir = invocation.namedArguments[#directory] as Directory;
-        if (path.basename(repoDir.path) == 'B') {
-          throw Exception('Failed to commit B');
-        }
-      });
-
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: inSyncTicketLocalizer(),
-            ggCanCommit: mockGgCanCommit,
-            ggDoCommit: mockGgDoCommit,
-          ),
-        );
       await expectLater(
-        () async => await runner.run([
-          'commit',
-          '--input',
-          ticketDir.path,
-          '--message',
-          'Test commit',
-        ]),
+        () => runCommand(
+          command(
+            ticketLocalizer: inSyncTicketLocalizer(),
+            ggDoCommit: failingDoCommit('B'),
+          ),
+          ticketDir,
+          ['--message', 'Test commit'],
+        ),
         throwsA(isA<Exception>()),
       );
       expect(messages, [
@@ -297,19 +282,15 @@ void main() {
     });
 
     test('commits no repo when the localization fails', () async {
-      final ggDoCommit = recordingDoCommit();
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: failingTicketLocalizer('Cannot localize A.'),
-            ggDoCommit: ggDoCommit,
-            editMessage: editMessage(),
-          ),
-        );
-
       await expectLater(
-        () => runner.run(['commit', '--input', ticketDir.path]),
+        () => runCommand(
+          command(
+            ticketLocalizer: failingTicketLocalizer('Cannot localize A.'),
+            ggDoCommit: stubDoCommit(),
+            edit: editMessage(),
+          ),
+          ticketDir,
+        ),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),
@@ -321,16 +302,7 @@ void main() {
 
       // Stopped before the message was asked for or any repo was committed.
       expect(capturedInitials, isEmpty);
-      verifyNever(
-        () => ggDoCommit.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      );
+      expect(committedMessages, isEmpty);
       expect(messages, ['\nCommitting ...']);
     });
   });
@@ -341,24 +313,18 @@ void main() {
       String? message,
       EditMessage? edit,
       List<String> args = const [],
-    }) async {
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: inSyncTicketLocalizer(),
-            ggDoCommit: recordingDoCommit(),
-            editMessage: edit ?? editMessage(),
-          ),
-        );
-      await runner.run([
-        'commit',
-        '--input',
-        ticketDir.path,
+    }) => runCommand(
+      command(
+        ticketLocalizer: inSyncTicketLocalizer(),
+        ggDoCommit: stubDoCommit(),
+        edit: edit ?? editMessage(),
+      ),
+      ticketDir,
+      [
         if (message != null) ...['--message', message],
         ...args,
-      ]);
-    }
+      ],
+    );
 
     test('passes --force on to every repo', () async {
       // Without the flag every repo runs its checks.
@@ -437,34 +403,25 @@ void main() {
       File(path.join(emptyTicket.path, ticketJsonFileName))
           .writeAsStringSync('{"description": "Ticket desc"}');
 
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: inSyncTicketLocalizer(),
-            ggDoCommit: recordingDoCommit(),
-            editMessage: editMessage(),
-          ),
-        );
-      await runner.run(['commit', '--input', emptyTicket.path]);
+      await runCommand(
+        command(
+          ticketLocalizer: inSyncTicketLocalizer(),
+          ggDoCommit: stubDoCommit(),
+          edit: editMessage(),
+        ),
+        emptyTicket,
+      );
 
       expect(messages, contains('⚠️ No repos in this ticket'));
       expect(capturedInitials, isEmpty);
     });
 
     test('exec forwards the message without offering an edit', () async {
-      final command = DoCommitCommand(
-        ggLog: ggLog,
+      await command(
         ticketLocalizer: inSyncTicketLocalizer(),
-        ggDoCommit: recordingDoCommit(),
-        editMessage: editMessage(),
-      );
-
-      await command.exec(
-        directory: ticketDir,
-        ggLog: ggLog,
-        message: 'From code',
-      );
+        ggDoCommit: stubDoCommit(),
+        edit: editMessage(),
+      ).exec(directory: ticketDir, ggLog: ggLog, message: 'From code');
 
       expect(capturedInitials, isEmpty);
       expect(committedMessages, ['From code', 'From code']);
@@ -472,8 +429,6 @@ void main() {
   });
 
   group('nextCommitMessage from publish_config.json', () {
-    Directory repo(String name) => Directory(path.join(ticketDir.path, name));
-
     Future<void> proposeIn(
       String name, {
       required String firstLine,
@@ -485,23 +440,21 @@ void main() {
       ),
     ).save(file: gg.repoPublishConfigFile(repo(name)));
 
-    Future<void> run({String? message, EditMessage? edit}) async {
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: inSyncTicketLocalizer(),
-            ggDoCommit: recordingDoCommit(),
-            editMessage: edit ?? editMessage(),
-          ),
-        );
-      await runner.run([
-        'commit',
-        '--input',
-        ticketDir.path,
+    Future<void> run({
+      String? message,
+      EditMessage? edit,
+      gg.DoCommit? ggDoCommit,
+    }) => runCommand(
+      command(
+        ticketLocalizer: inSyncTicketLocalizer(),
+        ggDoCommit: ggDoCommit ?? stubDoCommit(),
+        edit: edit ?? editMessage(),
+      ),
+      ticketDir,
+      [
         if (message != null) ...['--message', message],
-      ]);
-    }
+      ],
+    );
 
     test('proposes the per-repo message and shares the rest', () async {
       // Only A carries a proposal — B keeps the one shared ticket message.
@@ -553,6 +506,9 @@ void main() {
       expect(config.commits.single.firstLine, 'Adapt message.json');
       // The proposal is not consumed — the AI keeps it up to date.
       expect(config.nextCommitMessage?.firstLine, 'Adapt message.json');
+      // The publish config was hidden before the commit.
+      verify(() => ensureIgnored.ensure(directory: any(named: 'directory')))
+          .called(2);
     });
 
     test('records no duplicate on a second identical run', () async {
@@ -569,33 +525,57 @@ void main() {
       await proposeIn('A', firstLine: 'Adapt message.json');
       await proposeIn('B', firstLine: 'B change');
 
-      final failing = MockGgDoCommit();
-      when(
-        () => failing.exec(
-          directory: any(named: 'directory'),
-          ggLog: any(named: 'ggLog'),
-          message: any(named: 'message'),
-          logType: any(named: 'logType'),
-          updateChangeLog: any(named: 'updateChangeLog'),
-          force: any(named: 'force'),
-        ),
-      ).thenThrow(Exception('nope'));
-
-      final runner = CommandRunner<void>('test', 'do commit ticket')
-        ..addCommand(
-          DoCommitCommand(
-            ggLog: ggLog,
-            ticketLocalizer: inSyncTicketLocalizer(),
-            ggDoCommit: failing,
-            editMessage: editMessage(),
-          ),
-        );
       await expectLater(
-        () => runner.run(['commit', '--input', ticketDir.path]),
+        () => run(ggDoCommit: failingDoCommit('A')),
         throwsA(isA<Exception>()),
       );
 
       expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
+      expect(gg.RepoPublishConfig.tryLoad(repo('B'))!.commits, hasLength(1));
+    });
+
+    test('records nothing when there was nothing to commit', () async {
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      await proposeIn('B', firstLine: 'B change');
+      stubIsCommitted((repo) => repo == 'A');
+
+      await run();
+
+      // gg do commit ran, but A had no changes: no commit was made.
+      expect(committedMessages, ['Adapt message.json', 'B change']);
+      expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
+      expect(gg.RepoPublishConfig.tryLoad(repo('B'))!.commits, hasLength(1));
+    });
+
+    test('records nothing when the changes cannot be read', () async {
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      await proposeIn('B', firstLine: 'B change');
+      stubIsCommitted((_) => throw Exception('no git'));
+
+      await run();
+
+      expect(gg.RepoPublishConfig.tryLoad(repo('A'))!.commits, isEmpty);
+    });
+
+    test('warns when the record cannot be written', () async {
+      await proposeIn('A', firstLine: 'Adapt message.json');
+      await proposeIn('B', firstLine: 'B change');
+      // A directory where the file belongs makes the write fail.
+      final file = gg.repoPublishConfigFile(repo('A'));
+      final ggDoCommit = stubDoCommit((repoDir) {
+        if (path.basename(repoDir.path) == 'A') {
+          file.deleteSync();
+          Directory(file.path).createSync();
+        }
+      });
+
+      await run(ggDoCommit: ggDoCommit);
+
+      expect(
+        messages.join('\n'),
+        contains('⚠️ Could not record the messages:'),
+      );
+      expect(messages.last, '\nAll repos committed\n');
     });
 
     test('accepts a long first line from the editor', () async {
@@ -638,6 +618,226 @@ void main() {
       await run(edit: editMessage('   '));
 
       expect(committedMessages.first, 'proposed');
+    });
+  });
+
+  group('message sheet', () {
+    late List<String> sheets;
+    late MockGgDidCommit didCommit;
+
+    /// Lets [didCommit] answer [answer] for each repo by its name.
+    void stubDidCommit(FutureOr<bool> Function(String repo) answer) =>
+        when(
+          () => didCommit.get(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        ).thenAnswer(
+          (invocation) async => answer(
+            path.basename(
+              (invocation.namedArguments[#directory] as Directory).path,
+            ),
+          ),
+        );
+
+    setUp(() {
+      sheets = [];
+      didCommit = MockGgDidCommit();
+      stubDidCommit((_) => false);
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
+    });
+
+    Future<void> run(
+      String? Function(String text) answer, {
+      List<String> args = const [],
+      bool hasTerminal = true,
+      gg.DoCommit? ggDoCommit,
+    }) => runCommand(
+      command(
+        ticketLocalizer: inSyncTicketLocalizer(),
+        ggDoCommit: ggDoCommit ?? stubDoCommit(),
+        edit: editMessage(),
+        ggDidCommit: didCommit,
+        hasTerminal: hasTerminal,
+        editText: ({required prompt, required text, required fileName}) async {
+          expect(prompt, 'gg do commit');
+          expect(fileName, 'TICKC_commit.jsonc');
+          sheets.add(text);
+          return answer(text);
+        },
+      ),
+      ticketDir,
+      args,
+    );
+
+    test('edits the commit and merge messages of all repos at once', () async {
+      await gg.RepoPublishConfig(
+        nextCommitMessage: gg.CommitMessage(firstLine: 'Proposed for B'),
+      ).save(file: gg.repoPublishConfigFile(repo('B')));
+
+      await run(
+        (_) =>
+            '{"A": {"commitMessage": ["Commit A", "Detail"], '
+            '"mergeMessage": ["Merge A"]}, "B": {}}',
+      );
+
+      // No line editor was opened.
+      expect(capturedInitials, isEmpty);
+      expect(sheets.single, contains('"commitMessage": ["Ticket desc"]'));
+      expect(sheets.single, contains('"commitMessage": ["Proposed for B"]'));
+      expect(committedMessages, ['Commit A\n\nDetail', 'Proposed for B']);
+
+      final a = gg.RepoPublishConfig.tryLoad(repo('A'))!;
+      expect(a.mergeMessage, 'Merge A');
+      expect(a.commits.single.text, 'Commit A\n\nDetail');
+      final b = gg.RepoPublishConfig.tryLoad(repo('B'))!;
+      // The default merge message was only confirmed: it is not frozen, so a
+      // later change of the ticket description still reaches the review.
+      expect(b.mergeMessage, isNull);
+      expect(b.commits.single.firstLine, 'Proposed for B');
+      verify(() => ensureIgnored.ensure(directory: any(named: 'directory')))
+          .called(2);
+    });
+
+    test('records no unchanged default merge message', () async {
+      await run((text) => text);
+
+      final a = gg.RepoPublishConfig.tryLoad(repo('A'))!;
+      expect(a.mergeMessage, isNull);
+      expect(a.commits.single.firstLine, 'Ticket desc');
+    });
+
+    test('leaves out the repos that are committed already', () async {
+      stubDidCommit((repo) => repo == 'A');
+
+      await run((text) => text);
+
+      expect(sheets.single, isNot(contains('"A"')));
+      expect(committedMessages, ['Ticket desc', 'Ticket desc']);
+      expect(gg.RepoPublishConfig.tryLoad(repo('A')), isNull);
+      expect(gg.RepoPublishConfig.tryLoad(repo('B'))!.commits, hasLength(1));
+    });
+
+    test('records no commit for a repo with nothing to commit', () async {
+      // gg's state is not written yet, but git has nothing to commit.
+      stubIsCommitted((repo) => repo == 'A');
+
+      await run((_) => '{"A": {"mergeMessage": ["Merge A"]}}');
+
+      final a = gg.RepoPublishConfig.tryLoad(repo('A'))!;
+      expect(a.commits, isEmpty);
+      expect(a.mergeMessage, 'Merge A');
+      expect(gg.RepoPublishConfig.tryLoad(repo('B'))!.commits, hasLength(1));
+    });
+
+    test('opens no sheet when every repo is committed', () async {
+      stubDidCommit((_) => true);
+
+      await run((text) => text);
+
+      expect(sheets, isEmpty);
+      expect(capturedInitials, isEmpty);
+    });
+
+    test('shows a repo whose state cannot be read', () async {
+      stubDidCommit((_) => throw Exception('no git'));
+
+      await run((text) => text);
+
+      expect(sheets.single, contains('"A"'));
+      expect(sheets.single, contains('"B"'));
+    });
+
+    test('commits with the shared message when a commit message is '
+        'cleared', () async {
+      await run((_) => '{"A": {"commitMessage": []}}');
+      // An emptied field keeps its default, the ticket description.
+      expect(committedMessages, ['Ticket desc', 'Ticket desc']);
+    });
+
+    test('records the commit but no merge message the .gitignore cannot '
+        'hide', () async {
+      when(() => ensureIgnored.ensure(directory: any(named: 'directory')))
+          .thenThrow(Exception('no git'));
+
+      await run((_) => '{"A": {"mergeMessage": ["Merge A"]}}');
+
+      final a = gg.RepoPublishConfig.tryLoad(repo('A'))!;
+      expect(a.mergeMessage, isNull);
+      expect(a.commits.single.firstLine, 'Ticket desc');
+      expect(
+        messages.join('\n'),
+        contains(
+          'Could not hide publish_config.json from git, the merge message '
+          'is not recorded: Exception: no git',
+        ),
+      );
+      expect(messages.last, '\nAll repos committed\n');
+    });
+
+    test('keeps the edits of a repo whose commit failed', () async {
+      await expectLater(
+        () => run(
+          (_) =>
+              '{"A": {"commitMessage": ["Commit A"]}, '
+              '"B": {"commitMessage": ["Commit B", "Detail"], '
+              '"mergeMessage": ["Merge B"]}}',
+          ggDoCommit: failingDoCommit('B'),
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(
+        gg.RepoPublishConfig.tryLoad(repo('A'))!.commits.single.firstLine,
+        'Commit A',
+      );
+      // B was not committed: its edits wait for the next run.
+      final b = gg.RepoPublishConfig.tryLoad(repo('B'))!;
+      expect(b.commits, isEmpty);
+      expect(b.nextCommitMessage?.text, 'Commit B\n\nDetail');
+      expect(b.mergeMessage, 'Merge B');
+    });
+
+    test('writes nothing for a failed repo that was not edited', () async {
+      await expectLater(
+        () => run((text) => text, ggDoCommit: failingDoCommit('B')),
+        throwsA(isA<Exception>()),
+      );
+      expect(gg.RepoPublishConfig.tryLoad(repo('B')), isNull);
+    });
+
+    test('falls back to the line editor without an editor', () async {
+      await run((_) => null);
+      expect(sheets, hasLength(1));
+      expect(capturedInitials, ['Ticket desc']);
+    });
+
+    test('--no-interactive takes the defaults without asking', () async {
+      await gg.RepoPublishConfig(
+        nextCommitMessage: gg.CommitMessage(firstLine: 'Proposed for B'),
+      ).save(file: gg.repoPublishConfigFile(repo('B')));
+
+      await run((text) => text, args: ['--no-interactive']);
+
+      expect(sheets, isEmpty);
+      expect(capturedInitials, isEmpty);
+      expect(committedMessages, ['Ticket desc', 'Proposed for B']);
+      expect(gg.RepoPublishConfig.tryLoad(repo('B'))!.commits, hasLength(1));
+    });
+
+    test('--no-interactive without a description passes no message', () async {
+      File(path.join(ticketDir.path, ticketJsonFileName)).deleteSync();
+      await run((text) => text, args: ['--no-interactive']);
+      expect(committedMessages, [null, null]);
+    });
+
+    test('takes the defaults without a terminal', () async {
+      await run((text) => text, hasTerminal: false);
+      // Nobody to ask: the defaults, without a single prompt.
+      expect(sheets, isEmpty);
+      expect(capturedInitials, isEmpty);
+      expect(committedMessages, ['Ticket desc', 'Ticket desc']);
     });
   });
 }

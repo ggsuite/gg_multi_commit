@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Edit commit messages, merge messages and version increments of all repos in one JSON file in VS Code
+
 ## 4.7.2 - 2026-10-19
 
 ### Changed
