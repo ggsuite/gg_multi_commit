@@ -53,7 +53,9 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 /// runs again — because the ticket moved on, or because `--force` says so —
 /// reuses what the last one recorded and only asks what is still open.
 /// `--reask-version` is how an answer is corrected: it asks every question
-/// afresh, with the recorded one pre-selected. It also runs a review the hash
+/// afresh, with the recorded one pre-selected. The questions of all repos are
+/// asked at once, on one sheet in the editor (see [PublishPlanner.plan]);
+/// `--no-interactive` asks none of them. It also runs a review the hash
 /// would otherwise skip, because a question nobody reaches is a question
 /// nobody can correct.
 ///
@@ -117,6 +119,7 @@ class DoReviewCommand extends DirCommand<void> {
     bool? verbose,
     bool? force,
     bool? reaskVersion,
+    bool? interactive,
     Map<String, dynamic> options = const {},
   }) => get(
     directory: directory,
@@ -124,6 +127,7 @@ class DoReviewCommand extends DirCommand<void> {
     verbose: verbose,
     force: force,
     reaskVersion: reaskVersion,
+    interactive: interactive,
   );
 
   @override
@@ -133,6 +137,7 @@ class DoReviewCommand extends DirCommand<void> {
     bool? verbose,
     bool? force,
     bool? reaskVersion,
+    bool? interactive,
   }) async {
     ggLog(cH1('\nPrepare review'));
 
@@ -143,6 +148,8 @@ class DoReviewCommand extends DirCommand<void> {
     final bool isForced = force ?? argResults?['force'] as bool? ?? false;
     final bool reask =
         reaskVersion ?? argResults?['reask-version'] as bool? ?? false;
+    final bool asks =
+        interactive ?? !(argResults?['no-interactive'] as bool? ?? false);
 
     // Step 1: Detect ticket folder -------------------------------------------
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -236,6 +243,7 @@ class DoReviewCommand extends DirCommand<void> {
       subs: subs,
       ggLog: ggLog,
       reask: reask,
+      interactive: asks,
     );
 
     // Step 8: Open a pull request per released repo and print its url --------
@@ -303,6 +311,7 @@ class DoReviewCommand extends DirCommand<void> {
     required List<Node> subs,
     required GgLog ggLog,
     required bool reask,
+    required bool interactive,
   }) async {
     final unfinishedPublish = anyRepoHasStatus(
       repoDirs: subs.map((node) => node.directory),
@@ -318,7 +327,7 @@ class DoReviewCommand extends DirCommand<void> {
       );
     }
 
-    final plan = await _publishPlanner.plan(
+    Future<PublishPlan> plan({required bool ask}) => _publishPlanner.plan(
       ticketDir: ticketDir,
       subs: subs,
       ggLog: ggLog,
@@ -328,16 +337,37 @@ class DoReviewCommand extends DirCommand<void> {
       reconfigure: reask,
       // A review is not a release: it never forces one, and it never fails
       // for a question a headless run cannot answer — `do publish` asks it.
-      ask: !unfinishedPublish,
+      ask: ask,
+      // --no-interactive asks nothing: a merge message takes its default,
+      // an open increment is left to `do publish`.
+      interactive: interactive,
       requireAnswers: false,
       wording: PublishPlanWording.review,
     );
 
-    if (!unfinishedPublish && plan.anyPublishes) {
-      await plan.save();
+    final PublishPlan answered;
+    try {
+      answered = await plan(ask: !unfinishedPublish);
+    } catch (e) {
+      // The questions failed — an editor that crashed, a prompt that broke.
+      // The pull requests are still worth opening: plan once more without
+      // asking, and leave the answers to `do publish`.
+      ggLog(
+        cWarn(
+          '⚠️ Could not ask the publish questions — `gg do publish` asks '
+          'them: $e',
+        ),
+      );
+      return plan(ask: false);
     }
 
-    return plan;
+    if (!unfinishedPublish && answered.anyPublishes) {
+      // A merge message nobody gave is not recorded: `do publish` derives
+      // the same default itself, and its `-m` must still win over it.
+      await answered.save(keepDefaultedMessages: false);
+    }
+
+    return answered;
   }
 
   /// Opens — or reuses — the pull request of every repo the ticket **releases**
@@ -498,6 +528,14 @@ class DoReviewCommand extends DirCommand<void> {
       'reask-version',
       negatable: false,
       help: 'Ask the version increment and merge message again.',
+      defaultsTo: false,
+    );
+    argParser.addFlag(
+      'no-interactive',
+      negatable: false,
+      help:
+          'Ask nothing: keep the recorded answers, take the ticket '
+          'description as merge message.',
       defaultsTo: false,
     );
   }
