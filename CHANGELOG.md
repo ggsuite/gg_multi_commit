@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.8.1 - 2026-10-29
+
+### Changed
+
+- Make sure the organization repos a ticket depends on are in the ocean
+- Merge main
+
 ## 4.8.0 - 2026-10-29
 
 ### Changed
