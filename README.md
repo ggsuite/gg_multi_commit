@@ -16,7 +16,7 @@ lives in `gg_multi_core`.
 | `can commit [--force]`   | run `gg can commit` in every ticket repo (analyze + format + tests)                 |
 | `can push`               | check that every ticket repo is push-ready                                          |
 | `can review`             | check that every repo is on a feature branch and committed                          |
-| `do commit [-m <msg>]`   | commit every ticket repo with the same message (defaults to the ticket description) |
+| `do commit [-m <msg>]`   | commit every ticket repo; without `-m` all messages are edited on one sheet         |
 | `do push`                | merge the main branches into the feature branches, upgrade deps, verify and push    |
 | `do review`              | push, open a pull request per repo, print the urls and record the review            |
 | `do upgrade deps`        | upgrade the dependencies of every ticket repo in dependency order                   |
@@ -51,6 +51,23 @@ version increment answered once is not asked for again. `do review --force`
 ignores the flag and reviews anyway; `do review --reask-version` asks the
 version increment and merge message again, with the recorded answer
 pre-selected.
+
+**One sheet instead of one prompt per repo.** Without `-m`, `do commit`
+opens the commit and merge messages of every repo that has something to
+commit as one `.jsonc` file in the editor (VS Code via `code --wait`, else
+`GG_EDITOR`, `VISUAL` or `EDITOR`); `do review` does the same with the merge
+messages and version increments of the repos it releases. Each message is a
+list of lines, the first line sums it up. Save and close the file to go on;
+a field left empty keeps its default — the proposal of `publish_config.json`,
+else the ticket description. Without an editor the questions are asked one
+by one as before. `--no-interactive` — and a run without a terminal — asks
+nothing and takes the defaults; an open version increment is left to
+`do publish`, which fails rather than guess it.
+
+`publish_config.json` keeps only what actually happened and what you
+changed: a commit is recorded once it was made, a merge message only when
+you edited it — a confirmed default keeps following the ticket description.
+When a repo fails to commit, its edited messages are kept for the next run.
 
 ## License
 

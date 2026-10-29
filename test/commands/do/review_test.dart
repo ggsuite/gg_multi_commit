@@ -122,6 +122,7 @@ void main() {
     Set<String> skipped = const <String>{},
     EditMessage? editMessage,
     bool hasTerminal = true,
+    gg.EditText? editText,
     bool wasReviewed = false,
     bool ensureIgnoredThrows = false,
   }) {
@@ -231,6 +232,9 @@ void main() {
         readManifestVersion: (_) async => '1.0.0',
         versionSelector: gg.VersionSelector(adapter: _StubAdapter(0)),
         editMessage: editMessage ?? (initial) async => initial,
+        editText:
+            editText ??
+            ({required prompt, required text, required fileName}) async => null,
         hasTerminal: () => hasTerminal,
       ),
       ensureIgnored: ensureIgnored,
@@ -960,6 +964,164 @@ void main() {
       expect(seeds, ['kept', '']);
       expect(configOf('A').mergeMessage, 'kept');
       expect(configOf('B').mergeMessage, 'fresh');
+    });
+
+    test('asks every repo on one sheet in the editor', () async {
+      Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
+      final sheets = <String>[];
+      final seeds = <String>[];
+      final bed = makeCommand(
+        repos: ['A', 'B'],
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial;
+        },
+        editText: ({required prompt, required text, required fileName}) async {
+          sheets.add(text);
+          return '{"A": {"versionIncrement": "minor", "mergeMessage": ["MA"]},'
+              ' "B": {"mergeMessage": ["MB"]}}';
+        },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(seeds, isEmpty);
+      expect(sheets, hasLength(1));
+      expect(configOf('A').mergeMessage, 'MA');
+      expect(configOf('A').versionIncrement, VersionIncrement.minor);
+      expect(configOf('B').mergeMessage, 'MB');
+      expect(configOf('B').versionIncrement, VersionIncrement.patch);
+    });
+
+    test(
+      '--no-interactive asks nothing and takes the ticket description',
+      () async {
+        File(path.join(ticketDir.path, ticketJsonFileName)).writeAsStringSync(
+          jsonEncode(<String, String>{'description': 'Ticket desc'}),
+        );
+        final seeds = <String>[];
+        final bed = makeCommand(
+          editMessage: (initial) async {
+            seeds.add(initial);
+            return initial;
+          },
+          editText: ({required prompt, required text, required fileName}) =>
+              fail('No sheet with --no-interactive.'),
+        );
+
+        await runner(bed.command)
+            .run(['review', '--no-interactive', '--input', ticketDir.path]);
+
+        expect(seeds, isEmpty);
+        verify(
+          () => bed.createPullRequest.get(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            message: 'Ticket desc',
+            body: any(named: 'body'),
+          ),
+        ).called(1);
+        // The default is no answer: `do publish` derives it itself, and its
+        // `-m` must still win. The increment stays open as well — `do
+        // publish` asks or fails for it.
+        expect(configOf('A').mergeMessage, isNull);
+        expect(configOf('A').versionIncrement, isNull);
+      },
+    );
+
+    test('opens the pull requests when the editor fails', () async {
+      // An editor that exits with an error: the questions are asked one by
+      // one instead.
+      final seeds = <String>[];
+      final bed = makeCommand(
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return 'Asked';
+        },
+        editText: ({required prompt, required text, required fileName}) =>
+            throw Exception('code exited with 1'),
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(seeds, hasLength(1));
+      expect(configOf('A').mergeMessage, 'Asked');
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Asked',
+          body: any(named: 'body'),
+        ),
+      ).called(1);
+    });
+
+    test('opens the pull requests when the sheet is left invalid', () async {
+      var opened = 0;
+      final bed = makeCommand(
+        editMessage: (_) async => 'Asked',
+        editText: ({required prompt, required text, required fileName}) async {
+          if (++opened > 5) fail('The sheet is opened again and again.');
+          // Broken once, then closed unchanged with the error on top.
+          return text.startsWith(gg.MessageSheet.errorPrefix)
+              ? text
+              : '{ broken';
+        },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(configOf('A').mergeMessage, 'Asked');
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Asked',
+          body: any(named: 'body'),
+        ),
+      ).called(1);
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
+    });
+
+    test('opens the pull requests when asking fails altogether', () async {
+      // Even the prompt breaks: the plan is made without questions, and the
+      // answers are left to `do publish`.
+      File(path.join(ticketDir.path, ticketJsonFileName)).writeAsStringSync(
+        jsonEncode(<String, String>{'description': 'Ticket desc'}),
+      );
+      final bed = makeCommand(
+        editMessage: (_) async => throw Exception('no prompt'),
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(
+        messages.any((m) => m.contains('Could not ask the publish questions')),
+        isTrue,
+      );
+      verify(
+        () => bed.createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: 'Ticket desc',
+          body: any(named: 'body'),
+        ),
+      ).called(1);
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
+      // Nothing was answered, so nothing is recorded.
+      expect(configFile('A').existsSync(), isFalse);
     });
 
     test('--force alone asks nothing again', () async {
