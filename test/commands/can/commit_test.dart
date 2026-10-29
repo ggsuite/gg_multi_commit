@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
+import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:mocktail/mocktail.dart';
@@ -228,11 +229,10 @@ void main() {
         );
       await runner.run(['commit', '--input', sampleTicket.path]);
 
-      expect(messages.take(3), [
-        '\n⚠️ Repos between the ticket repos, but not in it:',
-        '  - c',
-        'Run gg do add c to add them.\n',
-      ]);
+      final warning = [
+        for (final line in missingBetweenReport(['c'])) rmControls(line),
+      ];
+      expect(messages.take(warning.length), warning);
       expect(messages.last, '\nAll repos can be committed\n');
       verify(
         () => ggCanCommit.exec(
