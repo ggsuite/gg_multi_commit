@@ -14,7 +14,7 @@ dependencies:
   gg_lang: ^0.8.3
   gg_local_package_dependencies: ^4.2.3
   gg_log: ^1.2.0
-  gg_multi_core: ^4.14.1
+  gg_multi_core: ^4.15.0
   gg_one: ^14.4.12
   gg_one_core: ^2.16.0
   gg_publish: ^4.10.2
