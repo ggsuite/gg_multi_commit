@@ -165,10 +165,10 @@ packages:
     dependency: transitive
     description:
       name: dna_gg
-      sha256: a57431385f8391ac08e1b1c71f15de04f231faea9b1277d01f19291ffc480e16
+      sha256: ff381b57d77f0c04bd07470fb40a01b8e5e8ef745e09e1ef8919d29eff64e586
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "1.1.1"
   dna_ggsuite:
     dependency: "direct dev"
     description:
@@ -309,10 +309,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_git
-      sha256: "947aedb7121802be956c740e3df404865b3022568dc24041a2bd88152d6ba77f"
+      sha256: "2937d71318553ce07a7b5a90811c54d124bfc5d9276a3e5d27c186063e0086a1"
       url: "https://pub.dev"
     source: hosted
-    version: "4.5.5"
+    version: "4.7.0"
   gg_hash:
     dependency: transitive
     description:
@@ -397,10 +397,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_multi_core
-      sha256: "44c5f5f245f30ffcba29d4fd988a17048dd411c2c53ecd73c2ac215ed64cd431"
+      sha256: "29b5bdfb4b0e25c17f918ea372b4abaf917233eebb69a65d2c517f8f2a3c4398"
       url: "https://pub.dev"
     source: hosted
-    version: "4.14.0"
+    version: "4.15.0"
   gg_one:
     dependency: "direct main"
     description:
@@ -421,10 +421,10 @@ packages:
     dependency: "direct main"
     description:
       name: gg_one_core
-      sha256: "416db55ca0fd37458cd9b68bfc38ca0eba33865f9b3aacc994f4f2f4cf84a5b4"
+      sha256: "8ca5702d6151b9c6f8d8e0364e22e37d2467a0fc75b978bf60b4cb4709371d2f"
       url: "https://pub.dev"
     source: hosted
-    version: "2.15.1"
+    version: "2.16.0"
   gg_one_do_publish:
     dependency: transitive
     description:

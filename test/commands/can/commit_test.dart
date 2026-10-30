@@ -213,10 +213,12 @@ void main() {
     });
 
     test('only warns about a repo missing between the ticket repos', () async {
-      // a reaches its ticket sibling b only through the ocean's c.
+      // a reaches its ticket sibling b only through the ocean's c, and the
+      // recorded major release of b breaks c.
       final sampleTicket = await createSampleTicket(tempDir);
       await addDependency(sampleRepo(sampleTicket, 'a'), 'c', commit: true);
       addOceanRepo(tempDir, 'c', 'b');
+      await recordBreakingRelease(sampleRepo(sampleTicket, 'b'));
       final ggCanCommit = mockCanCommit();
 
       final runner = CommandRunner<void>('test', 'can commit ticket')
@@ -230,7 +232,8 @@ void main() {
       await runner.run(['commit', '--input', sampleTicket.path]);
 
       final warning = [
-        for (final line in missingBetweenReport(['c'])) rmControls(line),
+        for (final line in missingBetweenReport(['c'], breaking: ['b']))
+          rmControls(line),
       ];
       expect(messages.take(warning.length), warning);
       expect(messages.last, '\nAll repos can be committed\n');

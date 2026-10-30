@@ -9,6 +9,8 @@ import 'dart:io';
 import 'package:gg_git/gg_git_test_helpers.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
+import 'package:gg_one_core/gg_one_core.dart' as gg;
+import 'package:gg_publish/gg_publish.dart' show VersionIncrement;
 import 'package:mocktail/mocktail.dart';
 import 'package:path/path.dart' as path;
 
@@ -108,6 +110,17 @@ MockTicketLocalizer failingTicketLocalizer(String message) {
     ),
   ).thenThrow(Exception(message));
   return localizer;
+}
+
+// .............................................................................
+/// Records and commits a major release of [repo], as `gg do review` answers
+/// it — the release that makes the ocean repos above it needed.
+Future<void> recordBreakingRelease(Directory repo) async {
+  final file = gg.repoPublishConfigFile(repo);
+  await gg.RepoPublishConfig(versionIncrement: VersionIncrement.major)
+      .save(file: file);
+  await runGit(repo, ['add', '-f', file.path]);
+  await runGit(repo, ['commit', '-m', 'Record a major release']);
 }
 
 // .............................................................................

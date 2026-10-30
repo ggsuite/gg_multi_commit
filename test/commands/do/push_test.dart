@@ -763,6 +763,8 @@ void main() {
       ticketDir = await createSampleTicket(tempDir);
       final a = sampleRepo(ticketDir, 'a');
       addOceanRepo(tempDir, 'c', 'b');
+      // The recorded major release of b breaks c.
+      await recordBreakingRelease(sampleRepo(ticketDir, 'b'));
       final ggCanCommit = MockGgCanCommit();
       when(
         () => ggCanCommit.exec(
@@ -808,7 +810,10 @@ void main() {
         messages.where((m) => m.contains('Repos between the ticket repos')),
         hasLength(1),
       );
-      expect(messages, contains('Run gg do add c to add them.\n'));
+      expect(
+        messages,
+        contains('Run gg do add transitive for b to add them.\n'),
+      );
       verify(
         () => bed.ggDoPush.exec(
           directory: any(named: 'directory'),

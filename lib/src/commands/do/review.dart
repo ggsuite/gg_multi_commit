@@ -59,6 +59,15 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 /// would otherwise skip, because a question nobody reaches is a question
 /// nobody can correct.
 ///
+/// **A breaking release brings its dependents along.** When the plan gives a
+/// repository an increment that leaves the caret range of its last version,
+/// every ocean repo between it and a ticket repo depending on it has to be
+/// released too — its published constraint cannot take the new version. The
+/// review adds those repos (`gg do add transitive for <repo>`, handed over
+/// as [AddReposBetween]) and runs steps 2–7 again with them, until no
+/// release strands anything. That is what keeps a ticket lean: it holds the
+/// repos between only when a release needs them.
+///
 /// The review does not touch the repos' dependency references: the feature
 /// branches keep their local path references. Whoever checks the branch out
 /// recreates the whole setup from the ticket's `ticket.json`
@@ -76,7 +85,9 @@ class DoReviewCommand extends DirCommand<void> {
     TicketState? ticketState,
     PublishPlanner? publishPlanner,
     gg.EnsurePublishConfigIgnored? ensureIgnored,
-  }) : _canReviewCommand = canReviewCommand ?? CanReviewCommand(ggLog: ggLog),
+    AddReposBetween? addReposBetween,
+  }) : _addBetween = addReposBetween,
+       _canReviewCommand = canReviewCommand ?? CanReviewCommand(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
        _doPushCommand = doPushCommand ?? DoPushCommand(ggLog: ggLog),
@@ -111,6 +122,10 @@ class DoReviewCommand extends DirCommand<void> {
   /// Lists the files a publish writes beside the release — the publish config
   /// among them — in each repository's `.gitignore`.
   final gg.EnsurePublishConfigIgnored _ensureIgnored;
+
+  /// Adds the repos a breaking release strands; null adds none and only says
+  /// which command would.
+  final AddReposBetween? _addBetween;
 
   @override
   Future<void> exec({
@@ -164,7 +179,7 @@ class DoReviewCommand extends DirCommand<void> {
     final ticketName = path.basename(ticketDir.path);
 
     // Step 2: Collect repos in processing order ------------------------------
-    final subs = await _sortedProcessingList.get(
+    var subs = await _sortedProcessingList.get(
       directory: ticketDir,
       ggLog: ggLog,
     );
@@ -198,53 +213,74 @@ class DoReviewCommand extends DirCommand<void> {
 
     final GgLog taskLog = verbose ? ggLog : <String>[].add;
 
-    // Step 4: Can review? ----------------------------------------------------
-    await GgStatusPrinter<void>(
-      message: 'Can review?',
-      ggLog: ggLog,
-      dark: true,
-    ).run(
-      () async => _runCanReview(
+    // Steps 4–7 run again while a breaking release brings in new repos.
+    final handled = <String>{};
+    PublishPlan plan;
+    while (true) {
+      // Step 4: Can review? ---------------------------------------------------
+      await GgStatusPrinter<void>(
+        message: 'Can review?',
+        ggLog: ggLog,
+        dark: true,
+      ).run(
+        () async => _runCanReview(
+          ticketDir: ticketDir,
+          ggLog: taskLog,
+          errorLog: ggLog,
+          force: isForced,
+        ),
+      );
+
+      // Step 5: Hide what the plan will write ---------------------------------
+      // Step 7 writes a `publish_config.json` into every repo it plans, and it
+      // does so *after* the push — nothing commits it afterwards. In a repo
+      // whose `.gitignore` predates the config/state split the file therefore
+      // stays behind as an untracked change, and the next `is committed` check
+      // — `do push`, `do publish`, the `.gg/gg.json` state commit — trips over
+      // it. Healing the `.gitignore` here, before the push, is what keeps the
+      // bootstrap commit from being left unpushed.
+      await _hidePublishFiles(subs: subs, ggLog: taskLog);
+
+      // Step 6: Push ----------------------------------------------------------
+      // `do push` merges the main branches into the feature branches and
+      // brings every repo onto the remote. A merge conflict bubbles up as
+      // [MergeConflictException] with the full report; the half-merged
+      // working tree survives for the user to resolve.
+      await _doPushCommand.exec(
+        directory: ticketDir,
+        ggLog: ggLog,
+        verbose: verbose,
+      );
+
+      // Step 7: Plan the release ----------------------------------------------
+      // Only now is the state the reviewer will see final: `do push` merged the
+      // main branches in and refreshed the dependencies, so only now can the
+      // skip check be trusted. The pass decides which repos the ticket releases
+      // and asks their version increment and merge message.
+      plan = await _planRelease(
         ticketDir: ticketDir,
-        ggLog: taskLog,
-        errorLog: ggLog,
-        force: isForced,
-      ),
-    );
+        subs: subs,
+        ggLog: ggLog,
+        // A later round asks only the repos it added: what the first one
+        // asked again is answered now.
+        reask: reask && handled.isEmpty,
+        interactive: asks,
+      );
 
-    // Step 5: Hide what the plan will write ----------------------------------
-    // Step 7 writes a `publish_config.json` into every repo it plans, and it
-    // does so *after* the push — nothing commits it afterwards. In a repo
-    // whose `.gitignore` predates the config/state split the file therefore
-    // stays behind as an untracked change, and the next `is committed` check
-    // — `do push`, `do publish`, the `.gg/gg.json` state commit — trips over
-    // it. Healing the `.gitignore` here, before the push, is what keeps the
-    // bootstrap commit from being left unpushed.
-    await _hidePublishFiles(subs: subs, ggLog: taskLog);
-
-    // Step 6: Push -----------------------------------------------------------
-    // `do push` merges the main branches into the feature branches and
-    // brings every repo onto the remote. A merge conflict bubbles up as
-    // [MergeConflictException] with the full report; the half-merged
-    // working tree survives for the user to resolve.
-    await _doPushCommand.exec(
-      directory: ticketDir,
-      ggLog: ggLog,
-      verbose: verbose,
-    );
-
-    // Step 7: Plan the release -----------------------------------------------
-    // Only now is the state the reviewer will see final: `do push` merged the
-    // main branches in and refreshed the dependencies, so only now can the
-    // skip check be trusted. The pass decides which repos the ticket releases
-    // and asks their version increment and merge message.
-    final plan = await _planRelease(
-      ticketDir: ticketDir,
-      subs: subs,
-      ggLog: ggLog,
-      reask: reask,
-      interactive: asks,
-    );
+      // Step 7b: A breaking release brings its dependents along ---------------
+      if (!await _addReposBetweenBreaking(
+        ticketDir: ticketDir,
+        plan: plan,
+        handled: handled,
+        ggLog: ggLog,
+      )) {
+        break;
+      }
+      subs = await _sortedProcessingList.get(
+        directory: ticketDir,
+        ggLog: ggLog,
+      );
+    }
 
     // Step 8: Open a pull request per released repo and print its url --------
     // Everything is on the remote now, so the work can be reviewed right
@@ -265,6 +301,62 @@ class DoReviewCommand extends DirCommand<void> {
       subs: subs,
       key: DidReviewCommand.stateKey,
     );
+  }
+
+  /// Adds the repos between the breaking releases of [plan] and the ticket
+  /// repos depending on them; returns whether any was added, which makes the
+  /// review run its steps again.
+  ///
+  /// A release in [handled] was asked about before: its repos are in the
+  /// ticket now, so only a release that turned breaking since — an answer
+  /// given for a repo just added — asks again. That is what ends the loop.
+  Future<bool> _addReposBetweenBreaking({
+    required Directory ticketDir,
+    required PublishPlan plan,
+    required Set<String> handled,
+    required GgLog ggLog,
+  }) async {
+    final addReposBetween = _addBetween;
+    final releases = plan.breaking.difference(handled);
+    if (releases.isEmpty) {
+      return false;
+    }
+    handled.addAll(releases);
+
+    final sorted = releases.toList()..sort();
+    final names = sorted.join(', ');
+    if (addReposBetween == null) {
+      // Nobody handed the command over: say what is missing, the publish
+      // gate would only name it later.
+      ggLog(
+        cWarn(
+          '⚠️ The release of $names breaks its dependents. Add the repos '
+          'between with gg do add transitive for ${sorted.join(' ')}.',
+        ),
+      );
+      return false;
+    }
+    ggLog(
+      cDetail(
+        '\n✓ The release of $names breaks its dependents — adding the repos '
+        'between it and the ticket repos depending on it',
+      ),
+    );
+    final added = await addReposBetween(
+      ticketDir: ticketDir,
+      releases: releases,
+      ggLog: ggLog,
+    );
+    if (added.isEmpty) {
+      return false;
+    }
+    ggLog(
+      cWarn(
+        '⚠️ Added ${added.join(', ')} to the ticket — reviewing again with '
+        '${added.length == 1 ? 'it' : 'them'}.',
+      ),
+    );
+    return true;
   }
 
   /// Lists the files a publish writes — the answered `publish_config.json`

@@ -125,6 +125,8 @@ void main() {
     gg.EditText? editText,
     bool wasReviewed = false,
     bool ensureIgnoredThrows = false,
+    AddReposBetween? addReposBetween,
+    int increment = 0,
   }) {
     final canReview = MockCanReviewCommand();
     when(
@@ -230,7 +232,7 @@ void main() {
         publishSkipCheck: skipCheck,
         publishedVersion: publishedVersion,
         readManifestVersion: (_) async => '1.0.0',
-        versionSelector: gg.VersionSelector(adapter: _StubAdapter(0)),
+        versionSelector: gg.VersionSelector(adapter: _StubAdapter(increment)),
         editMessage: editMessage ?? (initial) async => initial,
         editText:
             editText ??
@@ -238,6 +240,7 @@ void main() {
         hasTerminal: () => hasTerminal,
       ),
       ensureIgnored: ensureIgnored,
+      addReposBetween: addReposBetween,
     );
 
     return (
@@ -829,6 +832,142 @@ void main() {
           key: DidReviewCommand.stateKey,
         ),
       ).called(1);
+    });
+  });
+
+  group('DoReviewCommand breaking releases', () {
+    /// Records a major release of A, as an earlier review answered it.
+    Future<void> recordMajorA() =>
+        gg.RepoPublishConfig(
+          versionIncrement: VersionIncrement.major,
+          mergeMessage: 'Break A',
+        ).save(
+          file: gg.repoPublishConfigFile(
+            Directory(path.join(ticketDir.path, 'A')),
+          ),
+        );
+
+    test('adds the repos between a breaking release and reviews again with '
+        'them', () async {
+      await recordMajorA();
+      // The ticket list grows with what the hook adds.
+      final repos = ['A'];
+      final calls = <Set<String>>[];
+      final bed = makeCommand(
+        repos: repos,
+        skipped: {'M', 'N'},
+        addReposBetween:
+            ({required ticketDir, required releases, required ggLog}) async {
+              calls.add(releases);
+              for (final name in ['M', 'N']) {
+                Directory(path.join(ticketDir.path, name)).createSync();
+                repos.add(name);
+              }
+              return ['M', 'N'];
+            },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      // Asked once for A; the second round finds A handled and M, N skipped.
+      expect(calls, [
+        {'A'},
+      ]);
+      verify(
+        () => bed.doPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          verbose: any(named: 'verbose'),
+        ),
+      ).called(2);
+      expect(
+        messages,
+        containsAllInOrder([
+          '\n✓ The release of A breaks its dependents — adding the repos '
+              'between it and the ticket repos depending on it',
+          '⚠️ Added M, N to the ticket — reviewing again with them.',
+        ]),
+      );
+      // The review state covers the repos added.
+      final subs =
+          verify(
+                () => bed.ticketState.writeSuccess(
+                  ticketDir: any(named: 'ticketDir'),
+                  subs: captureAny(named: 'subs'),
+                  key: any(named: 'key'),
+                ),
+              ).captured.single
+              as List<Node>;
+      expect(subs.map((n) => n.name), ['A', 'M', 'N']);
+    });
+
+    test('--reask-version asks again in the first round only', () async {
+      await recordMajorA();
+      final repos = ['A'];
+      final seeds = <String>[];
+      final bed = makeCommand(
+        repos: repos,
+        skipped: {'M'},
+        // The stub picks major, so A stays breaking.
+        increment: 2,
+        editMessage: (initial) async {
+          seeds.add(initial);
+          return initial;
+        },
+        addReposBetween:
+            ({required ticketDir, required releases, required ggLog}) async {
+              Directory(path.join(ticketDir.path, 'M')).createSync();
+              repos.add('M');
+              return ['M'];
+            },
+      );
+
+      await runner(bed.command)
+          .run(['review', '--reask-version', '--input', ticketDir.path]);
+
+      // M was added — A stayed breaking —, and A was asked once.
+      expect(repos, ['A', 'M']);
+      expect(seeds, ['Break A']);
+    });
+
+    test('reviews once when nothing is missing between', () async {
+      await recordMajorA();
+      var calls = 0;
+      final bed = makeCommand(
+        addReposBetween:
+            ({required ticketDir, required releases, required ggLog}) async {
+              calls++;
+              return const <String>[];
+            },
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(calls, 1);
+      verify(
+        () => bed.doPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          verbose: any(named: 'verbose'),
+        ),
+      ).called(1);
+      expect(messages, isNot(contains(startsWith('⚠️ Added'))));
+    });
+
+    test('adds nothing for a release that does not break', () async {
+      var calls = 0;
+      final bed = makeCommand(
+        addReposBetween:
+            ({required ticketDir, required releases, required ggLog}) async {
+              calls++;
+              return const <String>[];
+            },
+      );
+
+      // The stub answers patch for A.
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(calls, 0);
     });
   });
 
