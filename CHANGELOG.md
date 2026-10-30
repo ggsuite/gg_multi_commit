@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Let gg do review add the repos between a breaking release and the ticket repos depending on it
+
 ## 4.8.2 - 2026-10-29
 
 ### Changed

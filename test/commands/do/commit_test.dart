@@ -239,11 +239,13 @@ void main() {
 
     test('commits and warns once when a repo is missing between the '
         'ticket repos', () async {
-      // a reaches its ticket sibling b only through the ocean's c.
+      // a reaches its ticket sibling b only through the ocean's c, and the
+      // recorded major release of b breaks c.
       final sampleTicket = await createSampleTicket(tempDir);
       final a = sampleRepo(sampleTicket, 'a');
       await addDependency(a, 'c');
       addOceanRepo(tempDir, 'c', 'b');
+      await recordBreakingRelease(sampleRepo(sampleTicket, 'b'));
 
       await runCommand(command(ggDoCommit: stubDoCommit()), sampleTicket, [
         '-m',
@@ -254,7 +256,10 @@ void main() {
         messages.where((m) => m.contains('Repos between the ticket repos')),
         hasLength(1),
       );
-      expect(messages, contains('Run gg do add c to add them.\n'));
+      expect(
+        messages,
+        contains('Run gg do add transitive for b to add them.\n'),
+      );
       expect(messages.last, '\nAll repos committed\n');
       expect(committedMessages, ['Use c', 'Use c']);
     });
