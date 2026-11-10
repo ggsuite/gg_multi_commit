@@ -1,6 +1,6 @@
 name: gg_multi_commit
 description: "Daily ticket flows of the gg_multi tool family - committing, pushing, reviewing and upgrading dependencies across all repos of a ticket in dependency order."
-version: 4.9.1
+version: 4.9.2
 repository: https://github.com/ggsuite/gg_multi_commit.git
 
 environment:
@@ -14,7 +14,7 @@ dependencies:
   gg_lang: ^0.8.4
   gg_local_package_dependencies: ^4.2.4
   gg_log: ^1.2.0
-  gg_multi_core: ^4.15.1
+  gg_multi_core: ^4.18.0
   gg_one: ^14.4.13
   gg_one_core: ^2.16.1
   gg_publish: ^4.10.3
@@ -24,7 +24,7 @@ dependencies:
 
 dev_dependencies:
   args: ^2.7.0
-  dna_ggsuite: ^1.0.1
+  dna_ggsuite: ^1.0.2
   gg_capture_print: ^1.2.1
   helix: ^1.14.0
   lints: ^6.1.0
