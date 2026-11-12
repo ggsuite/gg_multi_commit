@@ -97,8 +97,8 @@ void main() {
       expect(messages, contains('⚠️ No repos in this ticket'));
     });
 
-    test('upgrades all repos in order and forwards majorVersions: true '
-        'by default', () async {
+    test('upgrades all repos in order and leaves majorVersions to each '
+        'repository by default', () async {
       final mock = upgradeStub();
       final runner = CommandRunner<void>('test', 'do upgrade dependencies')
         ..addCommand(UpgradeDepsCommand(ggLog: ggLog, ggDoUpgradeDeps: mock));
@@ -118,7 +118,7 @@ void main() {
         () => mock.exec(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          majorVersions: true,
+          majorVersions: null,
         ),
       ).called(2);
     });
@@ -191,7 +191,7 @@ void main() {
         () => mock.exec(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          majorVersions: true,
+          majorVersions: null,
         ),
       ).called(2);
     });

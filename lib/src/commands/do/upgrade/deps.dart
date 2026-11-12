@@ -58,7 +58,7 @@ class UpgradeDepsCommand extends DirCommand<void> {
   }) async {
     ggLog(cH1('\nUpgrading dependencies ...'));
 
-    majorVersions ??= argResults?['major-versions'] as bool? ?? true;
+    majorVersions ??= _majorVersionsFromArgs;
 
     // Detect if we are inside a ticket folder
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -112,12 +112,25 @@ class UpgradeDepsCommand extends DirCommand<void> {
     throw Exception(cDetail('Failed to upgrade.'));
   }
 
+  // ...........................................................................
+  /// --[no-]major-versions when it was given on the command line, else null:
+  /// then the `.gg/gg_rc` of each repository decides.
+  bool? get _majorVersionsFromArgs {
+    final args = argResults;
+    if (args == null || !args.wasParsed('major-versions')) {
+      return null;
+    }
+    return args['major-versions'] as bool;
+  }
+
   // Adds command line arguments
   void _addArgs() {
     argParser.addFlag(
       'major-versions',
       abbr: 'm',
-      help: 'Upgrade packages to their latest versions.',
+      help:
+          'Upgrade across major versions. Without the flag, '
+          'do.upgrade.deps.majorVersions in .gg/gg_rc of each repo decides.',
       defaultsTo: true,
       negatable: true,
     );

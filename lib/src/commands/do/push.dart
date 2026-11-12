@@ -185,7 +185,7 @@ class DoPushCommand extends DirCommand<void> {
     verbose ??= argResults?['verbose'] as bool? ?? false;
     force ??= argResults?['force'] as bool? ?? false;
     gitForce ??= argResults?['git-force'] as bool? ?? false;
-    majorVersions ??= argResults?['major-versions'] as bool? ?? true;
+    majorVersions ??= _majorVersionsFromArgs;
     upgrade ??= argResults?['upgrade'] as bool? ?? true;
 
     // Detect if we are inside a ticket folder
@@ -310,7 +310,7 @@ class DoPushCommand extends DirCommand<void> {
       () async => _commitUpgradeChanges(
         nodes: nodes,
         ggLog: taskLog,
-        majorVersions: majorVersions!,
+        majorVersions: majorVersions,
         upgrade: upgrade!,
       ),
     );
@@ -334,20 +334,40 @@ class DoPushCommand extends DirCommand<void> {
   }
 
   // ...........................................................................
+  /// --[no-]major-versions when it was given on the command line, else null:
+  /// then the `.gg/gg_rc` of each repository decides.
+  bool? get _majorVersionsFromArgs {
+    final args = argResults;
+    if (args == null || !args.wasParsed('major-versions')) {
+      return null;
+    }
+    return args['major-versions'] as bool;
+  }
+
+  // ...........................................................................
   /// Commits the changes the upgrade phase left behind as a gg system
   /// commit — »#gg: dart pub upgrade …« with no CHANGELOG entry.
   Future<void> _commitUpgradeChanges({
     required List<Node> nodes,
     required GgLog ggLog,
-    required bool majorVersions,
+    required bool? majorVersions,
     required bool upgrade,
   }) async {
     // Without the upgrade phase only the post-merge `pub get` can have
-    // changed something — name the commit after what actually ran.
-    final message = upgrade
-        ? '${gg.ggCommitPrefix}dart pub upgrade '
-              '${majorVersions ? '--major-versions ' : ''}--tighten'
-        : '${gg.ggCommitPrefix}dart pub get';
+    // changed something — name the commit after what actually ran. Whether
+    // the upgrade crossed majors is decided per repository: the flag when it
+    // was given, else the repository's .gg/gg_rc.
+    String messageFor(Directory repoDir) {
+      if (!upgrade) {
+        return '${gg.ggCommitPrefix}dart pub get';
+      }
+      final majors = gg.DoUpgradeDeps.effectiveMajorVersions(
+        repoDir,
+        explicit: majorVersions,
+      );
+      return '${gg.ggCommitPrefix}dart pub upgrade '
+          '${majors ? '--major-versions ' : ''}--tighten';
+    }
 
     for (final node in nodes) {
       final repoDir = node.directory;
@@ -374,7 +394,7 @@ class DoPushCommand extends DirCommand<void> {
       await _systemCommit.commit(
         directory: repoDir,
         ggLog: ggLog,
-        message: message,
+        message: messageFor(repoDir),
         userCommitMessage: gg.readTicketDescriptionForRepo,
         // The upgrade tightened the constraints in pubspec.yaml, so the
         // recorded »everything is committed« hash is stale — and `can merge`
@@ -955,7 +975,9 @@ class DoPushCommand extends DirCommand<void> {
     argParser.addFlag(
       'major-versions',
       abbr: 'm',
-      help: 'Upgrade dependencies to their latest major versions.',
+      help:
+          'Upgrade across major versions. Without the flag, '
+          'do.upgrade.deps.majorVersions in .gg/gg_rc of each repo decides.',
       defaultsTo: true,
       negatable: true,
     );
