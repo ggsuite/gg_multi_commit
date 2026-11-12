@@ -373,10 +373,10 @@ packages:
     dependency: transitive
     description:
       name: gg_localize_refs
-      sha256: c31e1e912eea44c12cc10459aabf3dd8acc27e3939fadd95b815838a44874dd2
+      sha256: "381c3f385221aedcc886aaefd219fa8420e26690ac42e363efa3aa38a2f92ff7"
       url: "https://pub.dev"
     source: hosted
-    version: "5.2.1"
+    version: "5.3.0"
   gg_log:
     dependency: "direct main"
     description:
