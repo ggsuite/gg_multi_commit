@@ -1212,7 +1212,7 @@ void main() {
       );
     });
 
-    test('forwards majorVersions: true to the upgrade by default', () async {
+    test('leaves majorVersions to each repository by default', () async {
       final bed = makeCommand(repos: ['A']);
 
       await runner(bed.command).run(['push', '--input', ticketDir.path]);
@@ -1221,7 +1221,7 @@ void main() {
         () => bed.upgradeDeps.exec(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          majorVersions: true,
+          majorVersions: null,
         ),
       ).called(1);
     });
@@ -1424,6 +1424,36 @@ void main() {
 
       await runner(bed.command)
           .run(['push', '--input', ticketDir.path, '--no-major-versions']);
+
+      verify(
+        () => bed.systemCommit.commit(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: '#gg: dart pub upgrade --tighten',
+          userCommitMessage: any(named: 'userCommitMessage'),
+          stateKey: any(named: 'stateKey'),
+        ),
+      ).called(1);
+    });
+
+    test('the system commit message follows the .gg/gg_rc of the repo '
+        'when no flag is given', () async {
+      final bed = makeCommand(repos: ['A']);
+      gg.GgRc.repoFileOf(Directory(path.join(ticketDir.path, 'A')))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync(
+          '{"do": {"upgrade": {"deps": {"majorVersions": false}}}}',
+        );
+
+      var callCount = 0;
+      when(
+        () => bed.isCommitted.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+        ),
+      ).thenAnswer((_) async => callCount++ == 0);
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
 
       verify(
         () => bed.systemCommit.commit(
