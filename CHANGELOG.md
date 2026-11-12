@@ -5,6 +5,7 @@
 ### Changed
 
 - Let each repository's .gg/gg_rc decide on major upgrades
+- Depend on gg_one_commit directly
 
 ## 4.9.2 - 2026-11-10
 

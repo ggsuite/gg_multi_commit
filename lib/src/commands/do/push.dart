@@ -13,6 +13,7 @@ import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart
 import 'package:gg_git/gg_git.dart';
 import 'package:gg_log/gg_log.dart';
 import 'package:gg_one/gg_one.dart' as gg;
+import 'package:gg_one_commit/gg_one_commit.dart' show DoUpgradeDeps;
 import 'package:gg_publish/gg_publish.dart' as gg_publish;
 import 'package:gg_status_printer/gg_status_printer.dart';
 import 'package:path/path.dart' as path;
@@ -361,7 +362,7 @@ class DoPushCommand extends DirCommand<void> {
       if (!upgrade) {
         return '${gg.ggCommitPrefix}dart pub get';
       }
-      final majors = gg.DoUpgradeDeps.effectiveMajorVersions(
+      final majors = DoUpgradeDeps.effectiveMajorVersions(
         repoDir,
         explicit: majorVersions,
       );

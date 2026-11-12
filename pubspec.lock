@@ -399,7 +399,7 @@ packages:
       path: "../gg_multi_core"
       relative: true
     source: path
-    version: "4.18.0"
+    version: "4.19.0"
   gg_one:
     dependency: "direct main"
     description:
@@ -409,7 +409,7 @@ packages:
     source: hosted
     version: "14.4.13"
   gg_one_commit:
-    dependency: "direct overridden"
+    dependency: "direct main"
     description:
       path: "../gg_one_commit"
       relative: true
@@ -421,7 +421,7 @@ packages:
       path: "../gg_one_core"
       relative: true
     source: path
-    version: "2.16.1"
+    version: "2.17.0"
   gg_one_do_publish:
     dependency: "direct overridden"
     description:

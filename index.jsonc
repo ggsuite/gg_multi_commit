@@ -25,6 +25,7 @@
     "uses": {
       "gg_multi_core": "WorkspaceUtils, TicketState, TicketLocalizer, PublishPlanner",
       "gg_one": "per-repo commands: CanCommit, DoCommit, DoPush, DidCommit, CreatePullRequest, DoUpgradeDeps",
+      "gg_one_commit": "DoUpgradeDeps.effectiveMajorVersions for the upgrade commit of do push",
       "gg_one_core": "MessageSheet, CommitMessage, GgState, GgSystemCommit",
       "gg_local_package_dependencies": "SortedProcessingList: dependency order",
       "gg_changelog": "changelog of the commits",
