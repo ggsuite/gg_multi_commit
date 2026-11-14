@@ -1,14 +1,10 @@
 # Changelog
 
-## Unreleased
+## 4.11.0 - 2026-11-14
 
 ### Added
 
 - Add the blog post and describe the limits
-
-Add the blog post of the change
-README: several repos at once, GG_PARALLEL
-Tighten the dependencies
 
 ### Changed
 
