@@ -2,15 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Add the blog post and describe the limits
+
+Add the blog post of the change
+README: several repos at once, GG_PARALLEL
+Tighten the dependencies
+
 ### Changed
 
 - Check and push the repos of a ticket at once
-
-can commit confirms the repos that passed before at the same time; can push, did commit and did push handle several repos at once and report them in order
-do push fetches, resolves, commits and pushes several repos at the same time; the merges stay one by one
-do review creates the pull requests of all repos at the same time
-do push pushes four repos at a time, do review creates ten pull requests at a time, whatever the machine
-can commit: the test runs share the machine only when several repos are really checked; a single repo to check gets all of it
 
 ## 4.10.0 - 2026-11-12
 

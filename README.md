@@ -52,6 +52,14 @@ ignores the flag and reviews anyway; `do review --reask-version` asks the
 version increment and merge message again, with the recorded answer
 pre-selected.
 
+**Several repos at once.** `can commit`, `can push`, `did commit`,
+`did push`, `do push` and `do review` handle several repos at the same time
+and report them in repo order. Test runs: a quarter of the processors, at
+most four, one on a machine with fewer than eight processors; pushes: four;
+pull requests: ten at a time, and no more than 80 a minute and 500 an hour.
+`GG_PARALLEL=<n>` sets the number of test runs and caps the others;
+`GG_PARALLEL=1` handles one repo after the other.
+
 **One sheet instead of one prompt per repo.** Without `-m`, `do commit`
 opens the commit and merge messages of every repo that has something to
 commit as one `.jsonc` file in the editor (VS Code via `code --wait`, else
