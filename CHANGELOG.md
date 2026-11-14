@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.11.0 - 2026-11-14
+
+### Added
+
+- Add the blog post and describe the limits
+
+### Changed
+
+- Check and push the repos of a ticket at once
+
 ## 4.10.0 - 2026-11-12
 
 ### Changed

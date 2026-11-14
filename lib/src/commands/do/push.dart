@@ -319,7 +319,7 @@ class DoPushCommand extends DirCommand<void> {
     await _pushingRepos(
       nodes: nodes,
       ggLog: ggLog,
-      taskLog: taskLog,
+      verbose: verbose,
       gitForce: gitForce,
     );
 
@@ -370,39 +370,46 @@ class DoPushCommand extends DirCommand<void> {
           '${majors ? '--major-versions ' : ''}--tighten';
     }
 
-    for (final node in nodes) {
-      final repoDir = node.directory;
-      final isCommitted = await _isCommitted.get(
-        directory: repoDir,
-        ggLog: ggLog,
-      );
-      if (isCommitted) {
-        // The merge of the default branch leaves the tree clean but changed:
-        // the recorded »everything is committed« hash no longer matches, and
-        // `can merge` and `can publish` would refuse the repo right after
-        // this push with »Not committed yet«. `can commit` verified the
-        // merged tree a moment ago, so record it. A hash that still matches
-        // is left alone.
-        await _ggState.writeSuccess(
+    // A commit touches its own repo only: the repos are committed at the
+    // same time.
+    await gg.runInParallel<void>(
+      count: nodes.length,
+      maxParallel: gg.GgParallelism.light,
+      ggLog: ggLog,
+      task: (index, ggLog) async {
+        final repoDir = nodes[index].directory;
+        final isCommitted = await _isCommitted.get(
           directory: repoDir,
-          key: gg.GgState.doCommitKey,
+          ggLog: ggLog,
         );
-        continue;
-      }
-      // A system commit, not »gg do commit«: it must contain gg's own files
-      // only. Anything else the user left dirty is saved in its own,
-      // prefix-less commit first — the ticket description names it.
-      await _systemCommit.commit(
-        directory: repoDir,
-        ggLog: ggLog,
-        message: messageFor(repoDir),
-        userCommitMessage: gg.readTicketDescriptionForRepo,
-        // The upgrade tightened the constraints in pubspec.yaml, so the
-        // recorded »everything is committed« hash is stale — and `can merge`
-        // reads it through `did commit` right after this push.
-        stateKey: gg.GgState.doCommitKey,
-      );
-    }
+        if (isCommitted) {
+          // The merge of the default branch leaves the tree clean but
+          // changed: the recorded »everything is committed« hash no longer
+          // matches, and `can merge` and `can publish` would refuse the repo
+          // right after this push with »Not committed yet«. `can commit`
+          // verified the merged tree a moment ago, so record it. A hash that
+          // still matches is left alone.
+          await _ggState.writeSuccess(
+            directory: repoDir,
+            key: gg.GgState.doCommitKey,
+          );
+          return;
+        }
+        // A system commit, not »gg do commit«: it must contain gg's own
+        // files only. Anything else the user left dirty is saved in its own,
+        // prefix-less commit first — the ticket description names it.
+        await _systemCommit.commit(
+          directory: repoDir,
+          ggLog: ggLog,
+          message: messageFor(repoDir),
+          userCommitMessage: gg.readTicketDescriptionForRepo,
+          // The upgrade tightened the constraints in pubspec.yaml, so the
+          // recorded »everything is committed« hash is stale — and
+          // `can merge` reads it through `did commit` right after this push.
+          stateKey: gg.GgState.doCommitKey,
+        );
+      },
+    );
   }
 
   // ...........................................................................
@@ -412,39 +419,40 @@ class DoPushCommand extends DirCommand<void> {
   /// dependencies to resolve and is skipped. A failure is reported and fails
   /// the push: an unresolvable dependency after the merge is exactly what the
   /// user has to fix before the branch reaches the remote.
-  Future<void> _pubGet({
-    required List<Node> nodes,
-    required GgLog ggLog,
-  }) async {
-    for (final repo in nodes) {
-      final repoDir = repo.directory;
-      final repoName = path.basename(repoDir.path);
+  ///
+  /// Several repos resolve at the same time where that is safe, see
+  /// gg_multi_core's `runInstalls`; the lines still follow the order of
+  /// [nodes].
+  Future<void> _pubGet({required List<Node> nodes, required GgLog ggLog}) =>
+      runInstalls<void>(
+        dirs: <Directory>[
+          for (final repo in nodes)
+            if (checkProjectType(repo.directory).isDartFamily) repo.directory,
+        ],
+        ggLog: ggLog,
+        install: (repoDir, ggLog) async {
+          final repoName = path.basename(repoDir.path);
+          final type = checkProjectType(repoDir);
+          final executable = type == ProjectType.flutter ? 'flutter' : 'dart';
+          final result = await _processRunner(executable, <String>[
+            'pub',
+            'get',
+          ], workingDirectory: repoDir.path);
 
-      final type = checkProjectType(repoDir);
-      if (!type.isDartFamily) {
-        continue;
-      }
+          if (result.exitCode != 0) {
+            final stderrStr = result.stderr?.toString() ?? '';
+            final stdoutStr = result.stdout?.toString() ?? '';
+            throw Exception(
+              cError(
+                '"$executable pub get" failed in $repoName: '
+                '${stderrStr.isNotEmpty ? stderrStr : stdoutStr}',
+              ),
+            );
+          }
 
-      final executable = type == ProjectType.flutter ? 'flutter' : 'dart';
-      final result = await _processRunner(executable, <String>[
-        'pub',
-        'get',
-      ], workingDirectory: repoDir.path);
-
-      if (result.exitCode != 0) {
-        final stderrStr = result.stderr?.toString() ?? '';
-        final stdoutStr = result.stdout?.toString() ?? '';
-        throw Exception(
-          cError(
-            '"$executable pub get" failed in $repoName: '
-            '${stderrStr.isNotEmpty ? stderrStr : stdoutStr}',
-          ),
-        );
-      }
-
-      ggLog(cDetail('✓ Resolved dependencies of $repoName'));
-    }
-  }
+          ggLog(cDetail('✓ Resolved dependencies of $repoName'));
+        },
+      );
 
   // ...........................................................................
   /// Throws when one of the [nodes] has uncommitted changes.
@@ -452,16 +460,18 @@ class DoPushCommand extends DirCommand<void> {
     required List<Node> nodes,
     required GgLog ggLog,
   }) async {
-    final uncommitted = <String>[];
-    for (final repo in nodes) {
-      final isCommitted = await _isCommitted.get(
-        directory: repo.directory,
-        ggLog: ggLog,
-      );
-      if (!isCommitted) {
-        uncommitted.add(path.basename(repo.directory.path));
-      }
-    }
+    // Read-only and per repo: the repos are asked at the same time.
+    final isCommitted = await gg.runInParallel<bool>(
+      count: nodes.length,
+      maxParallel: gg.GgParallelism.light,
+      ggLog: ggLog,
+      task: (index, ggLog) =>
+          _isCommitted.get(directory: nodes[index].directory, ggLog: ggLog),
+    );
+    final uncommitted = <String>[
+      for (var i = 0; i < nodes.length; i++)
+        if (!isCommitted[i]) path.basename(nodes[i].directory.path),
+    ];
     if (uncommitted.isNotEmpty) {
       ggLog(cWarn('Uncommitted changes in'));
       for (final name in uncommitted) {
@@ -487,25 +497,50 @@ class DoPushCommand extends DirCommand<void> {
     required GgLog ggLog,
     required GgLog errorLog,
   }) async {
-    for (final repo in nodes) {
-      final repoDir = repo.directory;
+    // Make sure `origin/<main>` points to the remote's current default
+    // branch. Without this the merges below would silently merge a stale
+    // one. Fetching is what takes time here, and the fetch of one repo
+    // needs nothing of another: all repos fetch at the same time. The
+    // merges follow one by one — the first that fails ends the run.
+    final fetches = await gg.runInParallel<_MainBranchFetch>(
+      count: nodes.length,
+      maxParallel: gg.GgParallelism.network,
+      ggLog: ggLog,
+      task: (index, _) async {
+        final repoDir = nodes[index].directory;
+        final mainBranch = await _mainBranchName(repoDir);
+        if (mainBranch == null) {
+          return const _MainBranchFetch(null);
+        }
+        try {
+          await _runGitNetwork(<String>[
+            'fetch',
+            'origin',
+            mainBranch,
+          ], repoDir: repoDir);
+          return _MainBranchFetch(mainBranch);
+        } catch (e) {
+          // Reported where the merge of this repo would have followed.
+          return _MainBranchFetch(mainBranch, error: e);
+        }
+      },
+    );
+
+    for (var i = 0; i < nodes.length; i++) {
+      final repoDir = nodes[i].directory;
       final repoName = path.basename(repoDir.path);
 
-      final String? mainBranch = await _mainBranchName(repoDir);
+      final mainBranch = fetches[i].mainBranch;
       if (mainBranch == null) {
         ggLog(cDetail('✓ $repoName has no default branch — nothing to merge'));
         continue;
       }
 
       try {
-        // Make sure `origin/<main>` points to the remote's current default
-        // branch. Without this the merge below would silently merge a stale
-        // one.
-        await _runGitNetwork(<String>[
-          'fetch',
-          'origin',
-          mainBranch,
-        ], repoDir: repoDir);
+        final fetchError = fetches[i].error;
+        if (fetchError != null) {
+          throw fetchError;
+        }
 
         final result = await _processRunner('git', <String>[
           'merge',
@@ -641,51 +676,64 @@ class DoPushCommand extends DirCommand<void> {
   Future<void> _pushingRepos({
     required List<Node> nodes,
     required GgLog ggLog,
-    required GgLog taskLog,
+    required bool verbose,
     required bool gitForce,
   }) async {
     // The reason is printed once, right under the repo it belongs to. The
     // summary and the exception only name the repos — repeating a multi-line
     // git error three times buries it.
-    final failedRepos = <String>[];
+    //
+    // A push talks to the remote of its own repo only: several repos push
+    // at the same time — a few, however many repos there are and however
+    // large the machine is, because a host limits what one client may send
+    // (see GgParallelism.pushes). Their output still follows the order of
+    // the repos.
+    final failures = await gg.runInParallel<String?>(
+      count: nodes.length,
+      maxParallel: gg.GgParallelism.pushes,
+      ggLog: ggLog,
+      task: (index, ggLog) async {
+        final repoDir = nodes[index].directory;
+        final repoName = path.basename(repoDir.path);
+        // The details of a repo go where its other lines go — or nowhere.
+        final GgLog taskLog = verbose ? ggLog : <String>[].add;
 
-    for (final node in nodes) {
-      final repoDir = node.directory;
-      final repoName = path.basename(repoDir.path);
+        ggLog('\n${cH1(repoName)}');
 
-      ggLog('\n${cH1(repoName)}');
+        try {
+          // Integrate commits that already reached the remote feature
+          // branch — e.g. pushed from another machine — so the push below
+          // cannot be rejected as non-fast-forward.
+          final branch = await _currentBranch(repoDir);
+          if (branch != 'HEAD') {
+            await _integrateRemoteBranch(
+              repoDir: repoDir,
+              repoName: repoName,
+              branch: branch,
+              ggLog: taskLog,
+              errorLog: ggLog,
+            );
+          }
 
-      try {
-        // Integrate commits that already reached the remote feature branch —
-        // e.g. pushed from another machine — so the push below cannot be
-        // rejected as non-fast-forward.
-        final branch = await _currentBranch(repoDir);
-        if (branch != 'HEAD') {
-          await _integrateRemoteBranch(
-            repoDir: repoDir,
-            repoName: repoName,
-            branch: branch,
+          await _ggDoPush.exec(
+            directory: repoDir,
             ggLog: taskLog,
-            errorLog: ggLog,
+            force: gitForce,
           );
+          ggLog(cDetail('✓ Pushed'));
+          return null;
+        } catch (e) {
+          ggLog(
+            [
+              cDetail('✗ Failed to push'),
+              cError(rmControls('${(e as dynamic).message}')),
+            ].join('\n'),
+          );
+          return repoName;
         }
-
-        await _ggDoPush.exec(
-          directory: repoDir,
-          ggLog: taskLog,
-          force: gitForce,
-        );
-        ggLog(cDetail('✓ Pushed'));
-      } catch (e) {
-        ggLog(
-          [
-            cDetail('✗ Failed to push'),
-            cError(rmControls('${(e as dynamic).message}')),
-          ].join('\n'),
-        );
-        failedRepos.add(repoName);
-      }
-    }
+      },
+    );
+    final failedRepos = failures.nonNulls.toList();
 
     // Summarize the results ----------------------------------------------
     if (failedRepos.isEmpty) {
@@ -993,3 +1041,12 @@ class DoPushCommand extends DirCommand<void> {
 
 /// Mock for [DoPushCommand]
 class MockDoPushCommand extends MockDirCommand<void> implements DoPushCommand {}
+
+/// What fetching the default branch of a repo gave: its name ([mainBranch],
+/// null when the repo has none) and the [error] the fetch threw, if any.
+class _MainBranchFetch {
+  const _MainBranchFetch(this.mainBranch, {this.error});
+
+  final String? mainBranch;
+  final Object? error;
+}

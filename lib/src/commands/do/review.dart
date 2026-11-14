@@ -513,24 +513,46 @@ class DoReviewCommand extends DirCommand<void> {
 
     // Collected first, printed afterwards: the status printer overwrites its
     // own line, so nothing may be logged while it runs.
+    //
+    // Every pull request belongs to a repository of its own, so they are
+    // created side by side and reported in the order of the repos — ten at
+    // a time (GgParallelism.pullRequests). A provider counts the requests
+    // that create something per client, per minute and per hour, and locks
+    // a client out that sends more: the command that creates a pull request
+    // keeps that count for the whole process and waits when it is used up.
+    // A request that is turned away all the same is repeated after a wait.
     await GgStatusPrinter<void>(
       message: 'Creating pull requests',
       ggLog: ggLog,
       dark: true,
     ).run(() async {
-      for (final entry in released) {
-        try {
-          final url = await _createPullRequest.get(
-            directory: entry.directory,
-            ggLog: taskLog,
-            message: entry.mergeMessage ?? fallbackMessage,
-            body: entry.pullRequestBody,
-          );
-          if (url != null) {
-            urls[entry.name] = _changesUrl(url);
+      final results = await gg.runInParallel<({String? url, String? failure})>(
+        count: released.length,
+        maxParallel: gg.GgParallelism.pullRequests,
+        ggLog: taskLog,
+        task: (index, taskLog) async {
+          final entry = released[index];
+          try {
+            final url = await _createPullRequest.get(
+              directory: entry.directory,
+              ggLog: taskLog,
+              message: entry.mergeMessage ?? fallbackMessage,
+              body: entry.pullRequestBody,
+            );
+            return (url: url, failure: null);
+          } catch (e) {
+            return (url: null, failure: _reason(e));
           }
-        } catch (e) {
-          failures[entry.name] = _reason(e);
+        },
+      );
+
+      for (var i = 0; i < released.length; i++) {
+        final (:url, :failure) = results[i];
+        if (url != null) {
+          urls[released[i].name] = _changesUrl(url);
+        }
+        if (failure != null) {
+          failures[released[i].name] = failure;
         }
       }
     });

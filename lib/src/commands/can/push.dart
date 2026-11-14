@@ -65,21 +65,30 @@ class CanPushCommand extends DirCommand<void> {
       return;
     }
 
-    // Iterate over each repository and check if it can be pushed
-    for (final node in nodes) {
-      final repoDir = node.directory;
-      final repoName = path.basename(repoDir.path);
-      ggLog('\n${cH1(repoName)}');
-      try {
-        await _ggCanPush.exec(directory: repoDir, ggLog: ggLog);
-      } catch (e) {
-        // The reason is printed once, right under the repo it belongs to.
-        // The exception only ends the run.
-        ggLog([cDetail('✗ Cannot push'), cError(rmControls('$e'))].join('\n'));
-        ggLog(cAction('\nPlease fix the issues above.\n'));
-        throw Exception(cDetail('Cannot push.'));
-      }
-    }
+    // Check if each repository can be pushed — several at the same time,
+    // reported one after the other. The first repo that fails ends the run.
+    await gg.runInParallel<void>(
+      count: nodes.length,
+      maxParallel: gg.GgParallelism.heavy,
+      cancelOnError: true,
+      ggLog: ggLog,
+      task: (index, ggLog) async {
+        final repoDir = nodes[index].directory;
+        final repoName = path.basename(repoDir.path);
+        ggLog('\n${cH1(repoName)}');
+        try {
+          await _ggCanPush.exec(directory: repoDir, ggLog: ggLog);
+        } catch (e) {
+          // The reason is printed once, right under the repo it belongs to.
+          // The exception only ends the run.
+          ggLog(
+            [cDetail('✗ Cannot push'), cError(rmControls('$e'))].join('\n'),
+          );
+          ggLog(cAction('\nPlease fix the issues above.\n'));
+          throw Exception(cDetail('Cannot push.'));
+        }
+      },
+    );
 
     // All successful
     ggLog('\nAll repos can be pushed\n');
