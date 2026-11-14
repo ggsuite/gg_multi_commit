@@ -941,6 +941,7 @@ void main() {
       await runner(bed.command)
           .run(['push', '--input', ticketDir.path, '--verbose']);
 
+      // The repos fetch at the same time; the merges follow one by one.
       verifyInOrder([
         () => bed.git('git', [
           'fetch',
@@ -948,16 +949,16 @@ void main() {
           'main',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
         () => bed.git('git', [
+          'fetch',
+          'origin',
+          'main',
+        ], workingDirectory: path.join(ticketDir.path, 'B')),
+        () => bed.git('git', [
           'merge',
           '-m',
           '${gg.ggCommitPrefix}merge origin/main into the feature branch',
           'origin/main',
         ], workingDirectory: path.join(ticketDir.path, 'A')),
-        () => bed.git('git', [
-          'fetch',
-          'origin',
-          'main',
-        ], workingDirectory: path.join(ticketDir.path, 'B')),
         () => bed.git('git', [
           'merge',
           '-m',
@@ -1170,6 +1171,62 @@ void main() {
         );
       },
     );
+
+    test('reports a fetch that could not be started under its repo and '
+        'merges nothing after it', () async {
+      final bed = makeCommand();
+
+      // git cannot be started for the fetch of B; A fetches fine.
+      when(
+        () => bed.git('git', [
+          'fetch',
+          'origin',
+          'main',
+        ], workingDirectory: path.join(ticketDir.path, 'B')),
+      ).thenThrow(const ProcessException('git', ['fetch'], 'no git'));
+
+      await expectLater(
+        () async =>
+            await runner(bed.command).run(['push', '--input', ticketDir.path]),
+        throwsA(
+          isA<Exception>().having(
+            (e) => rmControls(e.toString()),
+            'message',
+            contains('Failed to merge the default branch.'),
+          ),
+        ),
+      );
+
+      // The repos fetch at the same time, so A was merged before B failed.
+      verify(
+        () => bed.git('git', [
+          'merge',
+          '-m',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
+          'origin/main',
+        ], workingDirectory: path.join(ticketDir.path, 'A')),
+      ).called(1);
+      verifyNever(
+        () => bed.git('git', [
+          'merge',
+          '-m',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
+          'origin/main',
+        ], workingDirectory: path.join(ticketDir.path, 'B')),
+      );
+      expect(
+        messages.any((m) => m.contains('✗ Failed to merge main into B')),
+        isTrue,
+      );
+      expect(messages.any((m) => m.contains('no git')), isTrue);
+      verifyNever(
+        () => bed.ggDoPush.exec(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      );
+    });
   });
 
   group('DoPushCommand upgrade, can-commit and commit phases', () {

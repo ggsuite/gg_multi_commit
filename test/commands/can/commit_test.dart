@@ -174,6 +174,96 @@ void main() {
       expect(forced, [true, true]);
     });
 
+    group('with repos that passed their checks before', () {
+      late gg.MockGgState ggState;
+      late List<String> checked;
+      late CommandRunner<void> runner;
+
+      /// Lets [ggState] answer for the repos by their folder name.
+      void passedBefore(bool Function(String repoName) answer) =>
+          when(
+            () => ggState.readSuccess(
+              directory: any(named: 'directory'),
+              key: any(named: 'key'),
+              ggLog: any(named: 'ggLog'),
+            ),
+          ).thenAnswer((invocation) async {
+            final dir = invocation.namedArguments[#directory] as Directory;
+            return answer(path.basename(dir.path));
+          });
+
+      setUp(() {
+        ggState = gg.MockGgState();
+        checked = <String>[];
+        runner = CommandRunner<void>('test', 'can commit ticket')
+          ..addCommand(
+            CanCommitCommand(
+              ggLog: ggLog,
+              ticketLocalizer: inSyncTicketLocalizer(),
+              ggCanCommit: mockCanCommit((invocation) async {
+                final dir = invocation.namedArguments[#directory] as Directory;
+                checked.add(path.basename(dir.path));
+              }),
+              ggDidCommit: mockDidCommit(true),
+              ggState: ggState,
+            ),
+          );
+      });
+
+      test('asks for the state gg can commit records', () async {
+        passedBefore((repoName) => repoName == 'A');
+
+        await runner.run(['commit', '--input', ticketDir.path]);
+
+        final keys = verify(
+          () => ggState.readSuccess(
+            directory: any(named: 'directory'),
+            key: captureAny(named: 'key'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        ).captured;
+        expect(keys, ['canCommit', 'canCommit']);
+        expect(
+          CanCommitCommand.canCommitStateKey,
+          gg.CanCommit(ggLog: ggLog).stateKey,
+        );
+
+        // Every repo still confirms or runs its checks, in order.
+        expect(checked, unorderedEquals(['A', 'B']));
+        expect(messages.first.split('\n'), ['', 'A']);
+        expect(messages.last, '\nAll repos committed\n');
+      });
+
+      test('does not ask with --force: every repo runs its checks', () async {
+        passedBefore((_) => true);
+
+        await runner.run(['commit', '--input', ticketDir.path, '--force']);
+
+        verifyNever(
+          () => ggState.readSuccess(
+            directory: any(named: 'directory'),
+            key: any(named: 'key'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        );
+        expect(checked, unorderedEquals(['A', 'B']));
+      });
+
+      test('runs the checks of a repo whose state cannot be read', () async {
+        when(
+          () => ggState.readSuccess(
+            directory: any(named: 'directory'),
+            key: any(named: 'key'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        ).thenThrow(Exception('Git automatic EOL conversion is OFF.'));
+
+        await runner.run(['commit', '--input', ticketDir.path]);
+
+        expect(checked, unorderedEquals(['A', 'B']));
+      });
+    });
+
     test('refuses unlocalized references before checking any repo', () async {
       final sampleTicket = await createSampleTicket(tempDir);
       await addDependency(sampleRepo(sampleTicket, 'a'), 'b', commit: true);

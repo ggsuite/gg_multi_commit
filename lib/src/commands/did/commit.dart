@@ -63,22 +63,31 @@ class DidCommitCommand extends DirCommand<void> {
       return;
     }
 
-    for (final node in nodes) {
-      final repoDir = node.directory;
-      final repoName = path.basename(repoDir.path);
-      ggLog('\n${cH1(repoName)}');
-      try {
-        await _ggDidCommit.exec(directory: repoDir, ggLog: ggLog);
-      } catch (e) {
-        ggLog(
-          [
-            cError('✗ $repoName was not committed'),
-            cDetail(rmControls('$e')),
-          ].join('\n'),
-        );
-        rethrow;
-      }
-    }
+    // Asking a repo only reads it: the repos are asked at the same time
+    // and reported one after the other. The first one that was not
+    // committed ends the run.
+    await gg.runInParallel<void>(
+      count: nodes.length,
+      maxParallel: gg.GgParallelism.light,
+      cancelOnError: true,
+      ggLog: ggLog,
+      task: (index, ggLog) async {
+        final repoDir = nodes[index].directory;
+        final repoName = path.basename(repoDir.path);
+        ggLog('\n${cH1(repoName)}');
+        try {
+          await _ggDidCommit.exec(directory: repoDir, ggLog: ggLog);
+        } catch (e) {
+          ggLog(
+            [
+              cError('✗ $repoName was not committed'),
+              cDetail(rmControls('$e')),
+            ].join('\n'),
+          );
+          rethrow;
+        }
+      },
+    );
 
     ggLog('\nAll repos committed\n');
   }
