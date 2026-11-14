@@ -45,6 +45,7 @@ void main() {
   final committedMessages = <String?>[];
   final capturedInitials = <String>[];
   final committedForces = <bool?>[];
+  final committedLogs = <bool?>[];
   late MockEnsurePublishConfigIgnored ensureIgnored;
   late MockIsCommitted isCommitted;
 
@@ -74,6 +75,7 @@ void main() {
     ).thenAnswer((invocation) async {
       committedMessages.add(invocation.namedArguments[#message] as String?);
       committedForces.add(invocation.namedArguments[#force] as bool?);
+      committedLogs.add(invocation.namedArguments[#updateChangeLog] as bool?);
       await answer?.call(invocation.namedArguments[#directory] as Directory);
     });
     return mock;
@@ -145,6 +147,7 @@ void main() {
     committedMessages.clear();
     capturedInitials.clear();
     committedForces.clear();
+    committedLogs.clear();
     ensureIgnored = MockEnsurePublishConfigIgnored();
     when(() => ensureIgnored.ensure(directory: any(named: 'directory')))
         .thenAnswer((_) async => false);
@@ -843,6 +846,161 @@ void main() {
       expect(sheets, isEmpty);
       expect(capturedInitials, isEmpty);
       expect(committedMessages, ['Ticket desc', 'Ticket desc']);
+    });
+  });
+
+  group('--no-log', () {
+    /// Lets repo [name] propose its own commit message.
+    Future<void> proposeIn(String name, String firstLine) =>
+        gg.RepoPublishConfig(
+          nextCommitMessage: gg.CommitMessage(firstLine: firstLine),
+        ).save(file: gg.repoPublishConfigFile(repo(name)));
+
+    /// Runs `do commit` on [ticketDir] with [args].
+    Future<void> run(List<String> args) => runCommand(
+      command(
+        ticketLocalizer: inSyncTicketLocalizer(),
+        ggDoCommit: stubDoCommit(),
+        edit: editMessage(),
+      ),
+      ticketDir,
+      args,
+    );
+
+    setUp(() {
+      File(path.join(ticketDir.path, ticketJsonFileName))
+          .writeAsStringSync('{"description": "Ticket desc"}');
+    });
+
+    test('logs in every repo without the flag', () async {
+      await run(['-m', 'Msg']);
+      expect(committedLogs, [true, true]);
+    });
+
+    test('logs in no repo with the flag', () async {
+      await run(['-m', 'Msg', '--no-log']);
+      expect(committedLogs, [false, false]);
+    });
+
+    test('reaches the repos with their own message', () async {
+      await proposeIn('A', 'Proposed for A');
+
+      await run(['--no-log']);
+
+      expect(capturedInitials, ['Ticket desc', 'Proposed for A']);
+      expect(committedMessages, ['Proposed for A', 'Ticket desc']);
+      expect(committedLogs, [false, false]);
+    });
+
+    test('reaches every repo without asking', () async {
+      await proposeIn('A', 'Proposed for A');
+
+      await run(['--no-interactive', '--no-log']);
+
+      expect(capturedInitials, isEmpty);
+      expect(committedMessages, ['Proposed for A', 'Ticket desc']);
+      expect(committedLogs, [false, false]);
+    });
+
+    test('leaves the decision to each repo when called from code', () async {
+      await command(
+        ticketLocalizer: inSyncTicketLocalizer(),
+        ggDoCommit: stubDoCommit(),
+      ).exec(directory: ticketDir, ggLog: ggLog, message: 'From code');
+      expect(committedLogs, [null, null]);
+    });
+
+    test('loses against the updateChangeLog of a caller', () async {
+      final cmd = command(
+        ticketLocalizer: inSyncTicketLocalizer(),
+        ggDoCommit: stubDoCommit(),
+      );
+      await runCommand(cmd, ticketDir, ['-m', 'Msg', '--no-log']);
+      expect(committedLogs, [false, false]);
+
+      // The parsed --no-log stays with the command; the caller still wins.
+      committedLogs.clear();
+      await cmd.exec(
+        directory: ticketDir,
+        ggLog: ggLog,
+        message: 'From code',
+        updateChangeLog: true,
+      );
+      expect(committedLogs, [true, true]);
+    });
+
+    group('with real repos', () {
+      late Directory sampleTicket;
+
+      /// The CHANGELOG.md of the sample repo [name], null when it is missing.
+      String? changeLog(String name) {
+        final file = File(
+          path.join(sampleRepo(sampleTicket, name).path, 'CHANGELOG.md'),
+        );
+        return file.existsSync() ? file.readAsStringSync() : null;
+      }
+
+      /// Commits the sample ticket with gg_one's real `gg do commit` per
+      /// repo — `-f` skips the checks.
+      Future<void> commit(List<String> args) => runCommand(
+        command(edit: editMessage()),
+        sampleTicket,
+        ['-f', ...args],
+      );
+
+      setUp(() async {
+        sampleTicket = await createSampleTicket(tempDir);
+        // A change to commit, and the url the CHANGELOG entry links to.
+        for (final name in ['a', 'b']) {
+          File(path.join(sampleRepo(sampleTicket, name).path, 'pubspec.yaml'))
+              .writeAsStringSync(
+                'repository: https://github.com/ggsuite/$name\n',
+                mode: FileMode.append,
+              );
+        }
+      });
+
+      test('writes the CHANGELOG entry without the flag', () async {
+        await commit(['-m', 'Add the repository']);
+
+        expect(changeLog('a'), contains('Add the repository'));
+        expect(changeLog('b'), contains('Add the repository'));
+      });
+
+      test('writes no CHANGELOG entry with the flag', () async {
+        await commit(['-m', 'Add the repository', '--no-log']);
+
+        expect(changeLog('a'), isNull);
+        expect(changeLog('b'), isNull);
+        expect(
+          await commitSubjects(sampleRepo(sampleTicket, 'a')),
+          contains('Add the repository'),
+        );
+      });
+
+      test(
+        'writes no CHANGELOG entry for a repo with its own message',
+        () async {
+          await gg.RepoPublishConfig(
+            nextCommitMessage: gg.CommitMessage(firstLine: 'Proposed for a'),
+          ).save(file: gg.repoPublishConfigFile(sampleRepo(sampleTicket, 'a')));
+          File(path.join(sampleTicket.path, ticketJsonFileName))
+              .writeAsStringSync('{"description": "Ticket desc"}');
+
+          await commit(['--no-interactive', '--no-log']);
+
+          expect(changeLog('a'), isNull);
+          expect(changeLog('b'), isNull);
+          expect(
+            await commitSubjects(sampleRepo(sampleTicket, 'a')),
+            contains('Proposed for a'),
+          );
+          expect(
+            await commitSubjects(sampleRepo(sampleTicket, 'b')),
+            contains('Ticket desc'),
+          );
+        },
+      );
     });
   });
 }

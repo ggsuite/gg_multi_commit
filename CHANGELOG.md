@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Honor --no-log in gg do commit
+
+Hand the log flag on to every repo, also to the repos committed
+with their own nextCommitMessage and without asking
+
 ## 4.11.0 - 2026-11-14
 
 ### Added
