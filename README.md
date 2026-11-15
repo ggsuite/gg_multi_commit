@@ -17,7 +17,7 @@ lives in `gg_multi_core`.
 | `can push`               | check that every ticket repo is push-ready                                          |
 | `can review`             | check that every repo is on a feature branch and committed                          |
 | `do commit [-m <msg>]`   | commit every ticket repo; without `-m` all messages are edited on one sheet         |
-| `do push`                | merge the main branches into the feature branches, upgrade deps, verify and push    |
+| `do push [--upgrade]`    | merge the main branches into the feature branches, verify and push                  |
 | `do review`              | push, open a pull request per repo, print the urls and record the review            |
 | `do upgrade deps`        | upgrade the dependencies of every ticket repo in dependency order                   |
 | `did commit`             | report which repos have new commits since the last reference                        |
@@ -35,13 +35,18 @@ warning, never a stop: run `gg do add <repo>`.
 
 `do push` is the single way a ticket reaches the remote: it checks for
 uncommitted changes, merges the remote main into every feature branch,
-localizes new references, resolves and upgrades the dependencies,
-re-verifies with `can commit`,
-records the upgrade as a `#gg:` system commit, integrates the remote
+localizes new references, resolves the dependencies, re-verifies with
+`can commit`, records what the resolution changed as a `#gg:` system
+commit, integrates the remote
 feature branch (recognizing obsolete branches left over from squash
 merges) and pushes every repo. The ticket hash is recorded as `doPush`, so a
 second run on an unchanged ticket returns right away — `--force` runs it
 anyway, `--git-force` is what force-pushes.
+
+`do push` upgrades no dependency: new versions arrive through maintenance,
+so a push changes only what the merged main branch brought in. `--upgrade`
+runs `do upgrade deps` before the checks, for a ticket that needs a newer
+version right away.
 
 `do review` runs `can review`, then `do push`, opens (or reuses) a pull
 request per repo — linking directly to the diff — and records the
