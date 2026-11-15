@@ -954,7 +954,7 @@ void main() {
         for (final name in ['a', 'b']) {
           File(path.join(sampleRepo(sampleTicket, name).path, 'pubspec.yaml'))
               .writeAsStringSync(
-                'repository: https://github.com/ggsuite/$name\n',
+                'repository: https://example.com/$name\n',
                 mode: FileMode.append,
               );
         }

@@ -9,6 +9,7 @@
 ### Changed
 
 - Honor --no-log in gg do commit
+- Use example.com in the --no-log tests
 
 ## 4.11.0 - 2026-11-14
 
