@@ -532,6 +532,7 @@ void main() {
         ggLog: localLog,
         gitForce: false,
         verbose: false,
+        upgrade: true,
       );
 
       // Without --verbose the per-repo output of `gg do push` is dropped,
@@ -1234,7 +1235,8 @@ void main() {
         'can commit, push', () async {
       final bed = makeCommand(repos: ['A']);
 
-      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--upgrade']);
 
       verifyInOrder([
         () => bed.isCommitted.get(
@@ -1272,7 +1274,8 @@ void main() {
     test('leaves majorVersions to each repository by default', () async {
       final bed = makeCommand(repos: ['A']);
 
-      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--upgrade']);
 
       verify(
         () => bed.upgradeDeps.exec(
@@ -1286,8 +1289,13 @@ void main() {
     test('forwards --no-major-versions to the upgrade', () async {
       final bed = makeCommand(repos: ['A']);
 
-      await runner(bed.command)
-          .run(['push', '--input', ticketDir.path, '--no-major-versions']);
+      await runner(bed.command).run([
+        'push',
+        '--input',
+        ticketDir.path,
+        '--upgrade',
+        '--no-major-versions',
+      ]);
 
       verify(
         () => bed.upgradeDeps.exec(
@@ -1307,6 +1315,7 @@ void main() {
         force: false,
         verbose: false,
         majorVersions: false,
+        upgrade: true,
       );
 
       verify(
@@ -1317,6 +1326,36 @@ void main() {
         ),
       ).called(1);
     });
+
+    test(
+      'upgrades nothing by default, but runs can commit and the push',
+      () async {
+        final bed = makeCommand(repos: ['A']);
+
+        await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+        verifyNever(
+          () => bed.upgradeDeps.exec(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            majorVersions: any(named: 'majorVersions'),
+          ),
+        );
+        verify(
+          () => bed.canCommitCmd.exec(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+          ),
+        ).called(1);
+        verify(
+          () => bed.ggDoPush.exec(
+            directory: any(named: 'directory'),
+            ggLog: any(named: 'ggLog'),
+            force: any(named: 'force'),
+          ),
+        ).called(1);
+      },
+    );
 
     test('--no-upgrade skips the upgrade phase but keeps can commit and '
         'the push', () async {
@@ -1415,13 +1454,14 @@ void main() {
         return !(name == 'B' && n > 1);
       });
 
-      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--upgrade']);
 
       final captured = verify(
         () => bed.systemCommit.commit(
           directory: captureAny(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          message: '#gg: dart pub upgrade --major-versions --tighten',
+          message: '#gg: dart pub upgrade --tighten',
           userCommitMessage: any(named: 'userCommitMessage'),
           // The upgrade rewrote pubspec.yaml, so the recorded »everything is
           // committed« hash is stale — `can merge` reads it through
@@ -1479,8 +1519,13 @@ void main() {
         ),
       ).thenAnswer((_) async => callCount++ == 0);
 
-      await runner(bed.command)
-          .run(['push', '--input', ticketDir.path, '--no-major-versions']);
+      await runner(bed.command).run([
+        'push',
+        '--input',
+        ticketDir.path,
+        '--upgrade',
+        '--no-major-versions',
+      ]);
 
       verify(
         () => bed.systemCommit.commit(
@@ -1499,7 +1544,7 @@ void main() {
       gg.GgRc.repoFileOf(Directory(path.join(ticketDir.path, 'A')))
         ..parent.createSync(recursive: true)
         ..writeAsStringSync(
-          '{"do": {"upgrade": {"deps": {"majorVersions": false}}}}',
+          '{"do": {"upgrade": {"deps": {"majorVersions": true}}}}',
         );
 
       var callCount = 0;
@@ -1510,13 +1555,14 @@ void main() {
         ),
       ).thenAnswer((_) async => callCount++ == 0);
 
-      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+      await runner(bed.command)
+          .run(['push', '--input', ticketDir.path, '--upgrade']);
 
       verify(
         () => bed.systemCommit.commit(
           directory: any(named: 'directory'),
           ggLog: any(named: 'ggLog'),
-          message: '#gg: dart pub upgrade --tighten',
+          message: '#gg: dart pub upgrade --major-versions --tighten',
           userCommitMessage: any(named: 'userCommitMessage'),
           stateKey: any(named: 'stateKey'),
         ),
@@ -1536,7 +1582,8 @@ void main() {
 
       await expectLater(
         () async =>
-            await runner(bed.command).run(['push', '--input', ticketDir.path]),
+            await runner(bed.command)
+                .run(['push', '--input', ticketDir.path, '--upgrade']),
         throwsA(
           isA<Exception>().having(
             (e) => rmControls(e.toString()),

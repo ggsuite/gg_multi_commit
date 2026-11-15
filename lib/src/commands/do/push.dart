@@ -51,15 +51,16 @@ class MergeConflictException implements Exception {
 /// 3. References the merge left unlocalized (a new edge between two ticket
 ///    repos) are localized and committed as `#gg:` commits. A repo the
 ///    merge put between two ticket repos is only a warning (step 5's).
-/// 4. The dependencies of every repo are upgraded
-///    (»dart pub upgrade [--major-versions] --tighten«). `--no-upgrade`
-///    skips this step — `do publish`'s ticket-wide checks do so, because
-///    the publish upgrades every repo again right before it is published.
-/// 5. `gg can commit` re-verifies every repo — merge and upgrade bring in
-///    changes, so the checks only make sense after them. Their output stays
-///    visible on the command line.
-/// 6. What the upgrade changed is recorded as a `#gg:` system commit
-///    (no CHANGELOG entry).
+/// 4. Only with `--upgrade`: the dependencies of every repo are upgraded
+///    (»dart pub upgrade [--major-versions] --tighten«). A push upgrades
+///    nothing by default — new versions of the dependencies arrive through
+///    maintenance, so a push changes only what the merge of the default
+///    branch brought in.
+/// 5. `gg can commit` re-verifies every repo — the merge (and an upgrade)
+///    bring in changes, so the checks only make sense after them. Their
+///    output stays visible on the command line.
+/// 6. What the merge's `pub get` or an upgrade changed is recorded as a
+///    `#gg:` system commit (no CHANGELOG entry).
 /// 7. Commits that already exist on the remote feature branch are integrated
 ///    (`git pull --rebase`; an obsolete leftover branch of an already merged
 ///    ticket is replaced instead — see [_remoteBranchIsObsolete]), and every
@@ -187,7 +188,7 @@ class DoPushCommand extends DirCommand<void> {
     force ??= argResults?['force'] as bool? ?? false;
     gitForce ??= argResults?['git-force'] as bool? ?? false;
     majorVersions ??= _majorVersionsFromArgs;
-    upgrade ??= argResults?['upgrade'] as bool? ?? true;
+    upgrade ??= argResults?['upgrade'] as bool? ?? false;
 
     // Detect if we are inside a ticket folder
     final String? ticketPath = WorkspaceUtils.detectTicketPath(
@@ -285,11 +286,10 @@ class DoPushCommand extends DirCommand<void> {
       dark: true,
     ).run(() async => _pubGet(nodes: nodes, ggLog: taskLog));
 
-    // Upgrade the dependencies of every repo. The output stays visible —
-    // the user must see what the upgrade changed. `do publish`'s ticket-wide
-    // checks skip this (upgrade: false): the publish upgrades every repo
-    // again right before it is published — after its refs point at the
-    // registry, which is the moment that matters.
+    // Upgrade the dependencies of every repo — only when asked for with
+    // `--upgrade`: new versions arrive through maintenance, not through a
+    // push. The output stays visible — the user must see what the upgrade
+    // changed.
     if (upgrade) {
       await _upgradeDependencies.exec(
         directory: ticketDir,
@@ -1033,7 +1033,7 @@ class DoPushCommand extends DirCommand<void> {
     argParser.addFlag(
       'upgrade',
       help: 'Upgrade the dependencies before pushing.',
-      defaultsTo: true,
+      defaultsTo: false,
       negatable: true,
     );
   }

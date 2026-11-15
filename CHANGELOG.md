@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Upgrade in gg do push only with --upgrade
+
+gg do push merges, checks and pushes, but upgrades nothing
+
 ## 4.11.1 - 2026-11-15
 
 ### Added
