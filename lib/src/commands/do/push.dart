@@ -302,9 +302,12 @@ class DoPushCommand extends DirCommand<void> {
     // sense after those changes came in. The output stays visible.
     await _canCommit.exec(directory: ticketDir, ggLog: ggLog);
 
-    // Record what the upgrade changed as a »#gg:« system commit.
+    // Record what the resolution or the upgrade changed as a »#gg:« system
+    // commit.
     await GgStatusPrinter<void>(
-      message: 'Committing upgrade changes',
+      message: upgrade
+          ? 'Committing upgrade changes'
+          : 'Committing the resolved dependencies',
       ggLog: ggLog,
       dark: true,
     ).run(

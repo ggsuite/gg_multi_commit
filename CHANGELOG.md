@@ -5,8 +5,10 @@
 ### Changed
 
 - Upgrade in gg do push only with --upgrade
+- Name the commit status of a push without upgrade
 
-gg do push merges, checks and pushes, but upgrades nothing
+»Committing the resolved dependencies« unless --upgrade is given
+Blog post about push without upgrade; index.jsonc
 
 ## 4.11.1 - 2026-11-15
 

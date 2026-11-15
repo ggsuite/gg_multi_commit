@@ -1354,6 +1354,16 @@ void main() {
             force: any(named: 'force'),
           ),
         ).called(1);
+
+        // Without an upgrade the status line does not speak of one.
+        expect(
+          messages.where((m) => m.contains('Committing the resolved')),
+          isNotEmpty,
+        );
+        expect(
+          messages.where((m) => m.contains('Committing upgrade changes')),
+          isEmpty,
+        );
       },
     );
 

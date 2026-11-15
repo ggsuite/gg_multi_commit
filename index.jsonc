@@ -13,7 +13,7 @@
 
   // 1-3 bullet points: the problem space.
   "domain": [
-    "can/do/did commit, push, review; do upgrade deps; localized refs, #gg: commits",
+    "can/do/did commit, push, review; do upgrade deps (do push only with --upgrade); localized refs, #gg: commits",
     "gg do commit / gg do review: all messages and version increments on one sheet in the editor; --no-interactive",
     "do review: pull requests, didReview flag for gg do publish",
   ],
