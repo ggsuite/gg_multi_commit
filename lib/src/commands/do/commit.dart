@@ -113,6 +113,8 @@ class DoCommitCommand extends DirCommand<void> {
     ggLog(cH1('\nCommitting ...'));
 
     message ??= _messageOption;
+    // --no-log reaches every repo; without the flag each repo logs.
+    updateChangeLog ??= argResults?['log'] as bool?;
     force ??= argResults?['force'] as bool? ?? false;
     interactive ??= !(argResults?['no-interactive'] as bool? ?? false);
 

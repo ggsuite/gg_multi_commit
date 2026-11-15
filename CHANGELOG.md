@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.11.1 - 2026-11-15
+
+### Added
+
+- Add the blog post about --no-log
+
+### Changed
+
+- Honor --no-log in gg do commit
+- Use example.com in the --no-log tests
+
 ## 4.11.0 - 2026-11-14
 
 ### Added
