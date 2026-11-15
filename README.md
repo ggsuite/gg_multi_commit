@@ -72,6 +72,10 @@ by one as before. `--no-interactive` — and a run without a terminal — asks
 nothing and takes the defaults; an open version increment is left to
 `do publish`, which fails rather than guess it.
 
+`do commit --no-log` writes the commit message into the `CHANGELOG.md` of
+no repo — for commits that are no change of their own, like a merge or a
+cleanup of the CHANGELOG.
+
 `publish_config.json` keeps only what actually happened and what you
 changed: a commit is recorded once it was made, a merge message only when
 you edited it — a confirmed default keeps following the ticket description.
