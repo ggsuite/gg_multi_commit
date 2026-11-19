@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:gg_git/gg_git_test_helpers.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
+import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_one_core/gg_one_core.dart' as gg;
 import 'package:gg_publish/gg_publish.dart' show VersionIncrement;
@@ -30,13 +31,19 @@ Future<Directory> createSampleTicket(Directory tempDir) async {
     file.copySync(target.path);
   }
   for (final repo in ['a', 'b']) {
-    final repoDir = sampleRepo(ticketDir, repo);
-    await initGit(repoDir);
-    await commitFile(repoDir, '.', message: 'Initial commit');
-    await runGit(repoDir, ['tag', 'sample']);
-    await runGit(repoDir, ['checkout', '-b', 'TICK']);
+    await _initSampleRepo(sampleRepo(ticketDir, repo));
   }
   return ticketDir;
+}
+
+// .............................................................................
+/// Makes [repoDir] a git repo on the feature branch `TICK` whose initial
+/// commit is tagged `sample`, like the repos of the sample ticket.
+Future<void> _initSampleRepo(Directory repoDir) async {
+  await initGit(repoDir);
+  await commitFile(repoDir, '.', message: 'Initial commit');
+  await runGit(repoDir, ['tag', 'sample']);
+  await runGit(repoDir, ['checkout', '-b', 'TICK']);
 }
 
 // .............................................................................
@@ -93,7 +100,30 @@ MockTicketLocalizer inSyncTicketLocalizer() {
       warnMissingRepos: any(named: 'warnMissingRepos'),
     ),
   ).thenAnswer((_) async => <String>[]);
+  when(
+    () => localizer.addMissingBetween(
+      ticketDir: any(named: 'ticketDir'),
+      addReposBetween: any(named: 'addReposBetween'),
+      ggLog: any(named: 'ggLog'),
+      breaking: any(named: 'breaking'),
+    ),
+  ).thenAnswer((_) async => <String>[]);
   return localizer;
+}
+
+// .............................................................................
+/// A real [TicketLocalizer] whose ocean copies count as fresh — the ocean
+/// repos of these tests are plain folders without a remote to refresh from.
+TicketLocalizer freshOceanTicketLocalizer(GgLog ggLog) {
+  final freshness = MockRepoFreshness();
+  when(
+    () => freshness.updateAll(
+      ggLog: any(named: 'ggLog'),
+      directories: any(named: 'directories'),
+      workspacePath: any(named: 'workspacePath'),
+    ),
+  ).thenAnswer((_) async {});
+  return TicketLocalizer(ggLog: ggLog, repoFreshness: freshness);
 }
 
 // .............................................................................
@@ -160,3 +190,24 @@ Future<List<String>> dirtyFiles(Directory repo) async {
       if (line.trim().isNotEmpty) line.substring(3),
   ];
 }
+
+// .............................................................................
+/// An [AddReposBetween] that does what `gg do add transitive for` does for
+/// the ocean repo [name] depending on [dependency]: puts it into the ticket
+/// as a git repo on the feature branch `TICK`, like the sample repos. Records
+/// the releases it is asked about in [calls].
+AddReposBetween addTicketRepo(
+  String name,
+  String dependency,
+  List<Set<String>> calls,
+) => ({required ticketDir, required releases, required ggLog}) async {
+  calls.add(releases);
+  final repo = sampleRepo(ticketDir, name)..createSync();
+  File(path.join(repo.path, '.gitignore')).writeAsStringSync('.dart_tool/\n');
+  File(path.join(repo.path, 'pubspec.yaml')).writeAsStringSync(
+    'name: $name\nversion: 1.0.0\n\nenvironment:\n  sdk: ^3.0.0\n'
+    'dependencies:\n  $dependency: ^1.0.0\n',
+  );
+  await _initSampleRepo(repo);
+  return [name];
+};

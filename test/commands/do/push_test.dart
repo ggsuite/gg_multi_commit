@@ -13,7 +13,11 @@ import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_commit/src/commands/can/commit.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
 import 'package:gg_multi_core/gg_multi_core.dart'
-    show MockTicketState, TicketLocalizer;
+    show
+        AddReposBetween,
+        MockTicketState,
+        TicketLocalizer,
+        addingBetweenMessage;
 import 'package:gg_multi_commit/src/commands/do/upgrade/deps.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_publish/gg_publish.dart' as gg_publish;
@@ -254,6 +258,7 @@ void main() {
     bool wasPushed = false,
     TicketLocalizer? ticketLocalizer,
     CanCommitCommand? canCommit,
+    AddReposBetween? addReposBetween,
   }) {
     final git = MockProcessRunner();
     stubBaseGit(git);
@@ -362,6 +367,7 @@ void main() {
       ticketState: ticketState,
       ggState: ggState,
       ticketLocalizer: ticketLocalizer ?? inSyncTicketLocalizer(),
+      addReposBetween: addReposBetween,
       gitRetry: GitRetry.example,
     );
 
@@ -813,7 +819,11 @@ void main() {
       );
       expect(
         messages,
-        contains('Run gg do add transitive for b to add them.\n'),
+        contains(
+          'gg do commit, push, localize, review and publish add them to the '
+          'ticket by themselves; gg do add transitive for b adds them right '
+          'away.\n',
+        ),
       );
       verify(
         () => bed.ggDoPush.exec(
@@ -822,6 +832,71 @@ void main() {
           force: any(named: 'force'),
         ),
       ).called(2);
+    });
+
+    test('adds the repo the merge put between a breaking release and a '
+        'ticket repo, and pushes it along', () async {
+      ticketDir = await createSampleTicket(tempDir);
+      final a = sampleRepo(ticketDir, 'a');
+      addOceanRepo(tempDir, 'c', 'b');
+      // The recorded major release of b breaks c.
+      await recordBreakingRelease(sampleRepo(ticketDir, 'b'));
+      final repos = ['b', 'a'];
+      final calls = <Set<String>>[];
+      final addC = addTicketRepo('c', 'b', calls);
+      final bed = makeCommand(
+        repos: repos,
+        ticketLocalizer: freshOceanTicketLocalizer(ggLog),
+        addReposBetween:
+            ({required ticketDir, required releases, required ggLog}) async {
+              final added = await addC(
+                ticketDir: ticketDir,
+                releases: releases,
+                ggLog: ggLog,
+              );
+              repos.insert(1, 'c');
+              return added;
+            },
+      );
+
+      // The default branch of a gained a dependency on the ocean's c.
+      when(
+        () => bed.git('git', [
+          'merge',
+          '-m',
+          '${gg.ggCommitPrefix}merge origin/main into the feature branch',
+          'origin/main',
+        ], workingDirectory: a.path),
+      ).thenAnswer((_) async {
+        await addDependency(a, 'c', commit: true);
+        return ProcessResult(0, 0, '', '');
+      });
+
+      await runner(bed.command).run(['push', '--input', ticketDir.path]);
+
+      expect(calls, [
+        {'b'},
+      ]);
+      expect(messages, contains(rmControls(addingBetweenMessage(['b']))));
+      final pushed = verify(
+        () => bed.ggDoPush.exec(
+          directory: captureAny(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          force: any(named: 'force'),
+        ),
+      ).captured.map((d) => path.basename((d as Directory).path));
+      expect(pushed, ['b', 'c', 'a']);
+      // The recorded push covers c.
+      final subs =
+          verify(
+                () => bed.ticketState.writeSuccess(
+                  ticketDir: any(named: 'ticketDir'),
+                  subs: captureAny(named: 'subs'),
+                  key: any(named: 'key'),
+                ),
+              ).captured.single
+              as List<Node>;
+      expect(subs.map((n) => n.name), ['b', 'c', 'a']);
     });
   });
 

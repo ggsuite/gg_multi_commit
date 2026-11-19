@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:gg_local_package_dependencies/gg_local_package_dependencies.dart';
+import 'package:gg_log/gg_log.dart';
 import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_commit/src/commands/can/review.dart';
 import 'package:gg_multi_commit/src/commands/did/review.dart';
@@ -220,8 +221,35 @@ void main() {
       (_) async => ensureIgnoredThrows ? throw Exception('boom') : true,
     );
 
+    // Adds what the hook adds, as the real localizer does once the ocean
+    // graph finds repos between.
+    final ticketLocalizer = MockTicketLocalizer();
+    when(
+      () => ticketLocalizer.addMissingBetween(
+        ticketDir: any(named: 'ticketDir'),
+        addReposBetween: any(named: 'addReposBetween'),
+        ggLog: any(named: 'ggLog'),
+        breaking: any(named: 'breaking'),
+      ),
+    ).thenAnswer((invocation) async {
+      final add =
+          invocation.namedArguments[#addReposBetween] as AddReposBetween?;
+      if (add == null) {
+        return const <String>[];
+      }
+      final releases = invocation.namedArguments[#breaking] as Set<String>;
+      final log = invocation.namedArguments[#ggLog] as GgLog;
+      log(addingBetweenMessage(releases));
+      return add(
+        ticketDir: invocation.namedArguments[#ticketDir] as Directory,
+        releases: releases,
+        ggLog: log,
+      );
+    });
+
     final command = DoReviewCommand(
       ggLog: ggLog,
+      ticketLocalizer: ticketLocalizer,
       canReviewCommand: canReview,
       sortedProcessingList: sortedProcessingList,
       doPushCommand: doPush,
