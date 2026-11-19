@@ -83,8 +83,8 @@
     },
     {
       "name": "dna-github",
-      "package": "@ggdna/dna-github",
-      "ecosystem": "node",
+      "package": "dna_github",
+      "ecosystem": "pub",
       "resolvedVersion": "0.1.1",
       "via": "dna-gg",
       "hash": "0xf541b93b3dc7995d"
@@ -93,7 +93,7 @@
       "name": "dna-gg",
       "package": "dna_gg",
       "ecosystem": "pub",
-      "resolvedVersion": "1.6.0",
+      "resolvedVersion": "1.6.1",
       "via": "dna-ggsuite",
       "hash": "0x1be177dde62ec3b7"
     },
@@ -245,7 +245,7 @@
       "name": "gg-multi-core",
       "package": "gg_multi_core",
       "ecosystem": "pub",
-      "resolvedVersion": "4.20.0",
+      "resolvedVersion": "4.20.1",
       "via": null,
       "hash": "0x32b3537fa5495175"
     },
