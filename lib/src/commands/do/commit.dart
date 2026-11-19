@@ -19,6 +19,11 @@ import 'package:path/path.dart' as path;
 import 'package:gg_multi_core/gg_multi_core.dart';
 
 /// Command to commit changes across all repositories in the current ticket.
+///
+/// A recorded release that breaks its dependents brings the ocean repos
+/// between it and the ticket repos depending on it into the ticket first —
+/// with [AddReposBetween], when it is handed over — so they are committed
+/// along. Without it, they are only warned about.
 class DoCommitCommand extends DirCommand<void> {
   /// Constructor
   DoCommitCommand({
@@ -35,7 +40,9 @@ class DoCommitCommand extends DirCommand<void> {
     gg.HasTerminal? hasTerminal,
     gg.EnsurePublishConfigIgnored? ensureIgnored,
     IsCommitted? isCommitted,
-  }) : _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
+    AddReposBetween? addReposBetween,
+  }) : _addBetween = addReposBetween,
+       _ggDoCommit = ggDoCommit ?? gg.DoCommit(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
        _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
@@ -79,6 +86,9 @@ class DoCommitCommand extends DirCommand<void> {
   /// Tells whether a repo has uncommitted changes — only then a commit is
   /// made, and recorded.
   final IsCommitted _isGitCommitted;
+
+  /// Adds the repos a breaking release strands; null adds none.
+  final AddReposBetween? _addBetween;
 
   @override
   Future<void> exec({
@@ -128,6 +138,13 @@ class DoCommitCommand extends DirCommand<void> {
     }
 
     final ticketDir = Directory(ticketPath);
+
+    // A breaking release brings the repos between into the ticket first.
+    await _ticketLocalizer.addMissingBetween(
+      ticketDir: ticketDir,
+      addReposBetween: _addBetween,
+      ggLog: ggLog,
+    );
 
     // Collect all repository directories in the ticket via SortedProcessingList
     final nodes = await _sortedProcessingList.get(

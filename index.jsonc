@@ -23,7 +23,7 @@
   "interfaces": {
     // "<repo-a>": "why / API"
     "uses": {
-      "gg_multi_core": "WorkspaceUtils, TicketState, TicketLocalizer, PublishPlanner",
+      "gg_multi_core": "WorkspaceUtils, TicketState, TicketLocalizer, PublishPlanner, AddReposBetween",
       "gg_one": "per-repo commands: CanCommit, DoCommit, DoPush, DidCommit, CreatePullRequest, DoUpgradeDeps",
       "gg_one_commit": "DoUpgradeDeps.effectiveMajorVersions for the upgrade commit of do push",
       "gg_one_core": "MessageSheet, CommitMessage, GgState, GgSystemCommit",
@@ -42,7 +42,7 @@
 
     // "<repo-b>": "why / API"
     "usedBy": {
-      "gg_multi_do_publish": "DidCommitCommand, DoPushCommand in can publish / do publish",
+      "gg_multi_do_publish": "DidCommitCommand, DoPushCommand in can publish / do publish; DoReviewCommand",
       "gg_multi": "registers can/do/did commit, push, review, upgrade deps",
     },
   },

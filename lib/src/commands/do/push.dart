@@ -49,8 +49,11 @@ class MergeConflictException implements Exception {
 /// 2. The remote default branch is merged into every feature branch, so the
 ///    pushed state always contains the current default branch.
 /// 3. References the merge left unlocalized (a new edge between two ticket
-///    repos) are localized and committed as `#gg:` commits. A repo the
-///    merge put between two ticket repos is only a warning (step 5's).
+///    repos) are localized and committed as `#gg:` commits. The ocean repos
+///    between a ticket repo and a recorded release that breaks its
+///    dependents — the merge may just have put one there — are added to the
+///    ticket with [AddReposBetween], when it is handed over, and pushed
+///    along; without it, step 5 only warns about them.
 /// 4. Only with `--upgrade`: the dependencies of every repo are upgraded
 ///    (»dart pub upgrade [--major-versions] --tighten«). A push upgrades
 ///    nothing by default — new versions of the dependencies arrive through
@@ -93,8 +96,10 @@ class DoPushCommand extends DirCommand<void> {
     TicketState? ticketState,
     gg.GgState? ggState,
     TicketLocalizer? ticketLocalizer,
+    AddReposBetween? addReposBetween,
     this._gitRetry = const GitRetry(),
-  }) : _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
+  }) : _addBetween = addReposBetween,
+       _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
        _ticketState = ticketState ?? TicketState(ggLog: ggLog),
        _ggState = ggState ?? gg.GgState(ggLog: ggLog),
        _ggDoPush = ggDoPush ?? gg.DoPush(ggLog: ggLog),
@@ -118,6 +123,9 @@ class DoPushCommand extends DirCommand<void> {
 
   /// Localizes the references a merged default branch brought in.
   final TicketLocalizer _ticketLocalizer;
+
+  /// Adds the repos a breaking release strands; null adds none.
+  final AddReposBetween? _addBetween;
 
   /// Instance of gg DoPush to perform the push action
   final gg.DoPush _ggDoPush;
@@ -203,7 +211,7 @@ class DoPushCommand extends DirCommand<void> {
 
     // Collect all repository directories
     // in the ticket using SortedProcessingList
-    final nodes = await _sortedProcessingList.get(
+    var nodes = await _sortedProcessingList.get(
       directory: ticketDir,
       ggLog: ggLog,
     );
@@ -267,13 +275,27 @@ class DoPushCommand extends DirCommand<void> {
 
     // A merged default branch can bring in a new edge between ticket repos.
     // Silent when in sync; a status line would overwrite what it reports.
-    // Missing repos are left to `can commit` below, which warns once.
+    // Missing repos are added below or left to `can commit`, which warns.
     await _ticketLocalizer.localizeUnlocalized(
       ticketDir: ticketDir,
       repos: nodes,
       ggLog: ggLog,
       warnMissingRepos: false,
     );
+
+    // A breaking release brings the repos between into the ticket — the
+    // merge may just have put one there. They are copied from the refreshed
+    // ocean, so they need no merge; everything below includes them.
+    if ((await _ticketLocalizer.addMissingBetween(
+      ticketDir: ticketDir,
+      addReposBetween: _addBetween,
+      ggLog: ggLog,
+    )).isNotEmpty) {
+      nodes = await _sortedProcessingList.get(
+        directory: ticketDir,
+        ggLog: ggLog,
+      );
+    }
 
     // The merge brings the manifests of the default branch into the feature
     // branches, so

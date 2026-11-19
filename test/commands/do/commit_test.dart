@@ -261,9 +261,84 @@ void main() {
       );
       expect(
         messages,
-        contains('Run gg do add transitive for b to add them.\n'),
+        contains(
+          'gg do commit, push, localize, review and publish add them to the '
+          'ticket by themselves; gg do add transitive for b adds them right '
+          'away.\n',
+        ),
       );
       expect(messages.last, '\nAll repos committed\n');
+      expect(committedMessages, ['Use c', 'Use c']);
+    });
+
+    test('adds the repos between a breaking release to the ticket and '
+        'commits them along', () async {
+      // a reaches its ticket sibling b only through the ocean's c, and the
+      // recorded major release of b breaks c.
+      final sampleTicket = await createSampleTicket(tempDir);
+      final a = sampleRepo(sampleTicket, 'a');
+      await addDependency(a, 'c');
+      addOceanRepo(tempDir, 'c', 'b');
+      await recordBreakingRelease(sampleRepo(sampleTicket, 'b'));
+      final calls = <Set<String>>[];
+      final committed = <String>[];
+
+      await runCommand(
+        DoCommitCommand(
+          ggLog: ggLog,
+          editText: noEditor,
+          hasTerminal: () => true,
+          ggDoCommit: stubDoCommit(
+            (repo) => committed.add(path.basename(repo.path)),
+          ),
+          ensureIgnored: ensureIgnored,
+          isCommitted: isCommitted,
+          ticketLocalizer: freshOceanTicketLocalizer(ggLog),
+          addReposBetween: addTicketRepo('c', 'b', calls),
+        ),
+        sampleTicket,
+        ['-m', 'Use c'],
+      );
+
+      expect(calls, [
+        {'b'},
+      ]);
+      expect(messages, contains(rmControls(addingBetweenMessage(['b']))));
+      expect(
+        messages.where((m) => m.contains('Repos between the ticket repos')),
+        isEmpty,
+      );
+      // c is in the processing order now and localized like any ticket repo.
+      expect(committed, ['b', 'c', 'a']);
+      expect(
+        File(path.join(a.path, 'pubspec_overrides.yaml')).readAsStringSync(),
+        contains('path: ../c'),
+      );
+    });
+
+    test('adds nothing when no release breaks', () async {
+      final sampleTicket = await createSampleTicket(tempDir);
+      final a = sampleRepo(sampleTicket, 'a');
+      await addDependency(a, 'c');
+      addOceanRepo(tempDir, 'c', 'b');
+      final calls = <Set<String>>[];
+
+      await runCommand(
+        DoCommitCommand(
+          ggLog: ggLog,
+          editText: noEditor,
+          hasTerminal: () => true,
+          ggDoCommit: stubDoCommit(),
+          ensureIgnored: ensureIgnored,
+          isCommitted: isCommitted,
+          ticketLocalizer: freshOceanTicketLocalizer(ggLog),
+          addReposBetween: addTicketRepo('c', 'b', calls),
+        ),
+        sampleTicket,
+        ['-m', 'Use c'],
+      );
+
+      expect(calls, isEmpty);
       expect(committedMessages, ['Use c', 'Use c']);
     });
 

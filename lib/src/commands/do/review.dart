@@ -86,7 +86,9 @@ class DoReviewCommand extends DirCommand<void> {
     PublishPlanner? publishPlanner,
     gg.EnsurePublishConfigIgnored? ensureIgnored,
     AddReposBetween? addReposBetween,
+    TicketLocalizer? ticketLocalizer,
   }) : _addBetween = addReposBetween,
+       _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
        _canReviewCommand = canReviewCommand ?? CanReviewCommand(ggLog: ggLog),
        _sortedProcessingList =
            sortedProcessingList ?? SortedProcessingList(ggLog: ggLog),
@@ -126,6 +128,10 @@ class DoReviewCommand extends DirCommand<void> {
   /// Adds the repos a breaking release strands; null adds none and only says
   /// which command would.
   final AddReposBetween? _addBetween;
+
+  /// Finds the repos a breaking release strands and adds them with
+  /// [_addBetween].
+  final TicketLocalizer _ticketLocalizer;
 
   @override
   Future<void> exec({
@@ -336,26 +342,16 @@ class DoReviewCommand extends DirCommand<void> {
       );
       return false;
     }
-    ggLog(
-      cDetail(
-        '\n✓ The release of $names breaks its dependents — adding the repos '
-        'between it and the ticket repos depending on it',
-      ),
-    );
-    final added = await addReposBetween(
+    final added = await _ticketLocalizer.addMissingBetween(
       ticketDir: ticketDir,
-      releases: releases,
+      addReposBetween: addReposBetween,
       ggLog: ggLog,
+      breaking: releases,
     );
     if (added.isEmpty) {
       return false;
     }
-    ggLog(
-      cWarn(
-        '⚠️ Added ${added.join(', ')} to the ticket — reviewing again with '
-        '${added.length == 1 ? 'it' : 'them'}.',
-      ),
-    );
+    ggLog(addedBetweenMessage(added));
     return true;
   }
 
