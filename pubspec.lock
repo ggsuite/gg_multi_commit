@@ -333,10 +333,10 @@ packages:
     dependency: transitive
     description:
       name: gg_is_flutter
-      sha256: b93b62e0e46ba1ea1165c3813cc306c41f687d8ca99d7b5cb4986832a6d3f6c1
+      sha256: dae6905a70431511cf9755dc492191082368c2b0f7374037680e469a4284953a
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.5"
+    version: "2.3.0"
   gg_is_github:
     dependency: transitive
     description:
@@ -386,12 +386,11 @@ packages:
     source: hosted
     version: "1.2.0"
   gg_merge:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: gg_merge
-      sha256: "872adfe0b018a02d8de8ff21c35b376b80a97e89ce31c558265d7ccd95a78817"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../gg_merge"
+      relative: true
+    source: path
     version: "3.9.0"
   gg_multi_core:
     dependency: "direct main"
@@ -898,4 +897,4 @@ packages:
     source: hosted
     version: "2.2.4"
 sdks:
-  dart: ">=3.13.0 <4.0.0"
+  dart: ">=3.14.0 <4.0.0"
