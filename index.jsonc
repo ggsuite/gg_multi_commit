@@ -15,7 +15,7 @@
   "domain": [
     "can/do/did commit, push, review; do upgrade deps (do push only with --upgrade); localized refs, #gg: commits",
     "gg do commit / gg do review: all messages and version increments on one sheet in the editor; --no-interactive",
-    "do review: pull requests, didReview flag for gg do publish",
+    "do review: pull requests, offer to open them in the browser (OpenInBrowser), didReview flag for gg do publish",
   ],
 
   // The repos this one depends on and the repos depending on it.
@@ -34,6 +34,7 @@
       "gg_lang": "language detection",
       "gg_args": "command base",
       "gg_status_printer": "progress output",
+      "gg_process": "ggStartProcess: OpenInBrowser starts the browser detached",
       "gg_console_colors": "colored output",
       "gg_log": "GgLog",
       "dna_ggsuite": "dev: DNA layer: guides, templates",

@@ -441,7 +441,7 @@ packages:
     source: hosted
     version: "2.7.10"
   gg_process:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: gg_process
       sha256: d617786addbc00fe417a512a3f18ea24eaf29771b2bbb3fd15903351b760d3d5

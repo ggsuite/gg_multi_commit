@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Offer to open the review pull requests in the browser
+
+gg do review asks: Open <n> PRs in Browser, one tab per pull request
+Nothing is asked without a terminal or with --no-interactive
+
 ## 4.12.1 - 2026-11-19
 
 ### Added
