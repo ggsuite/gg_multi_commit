@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.13.0 - 2026-11-24
+
+### Changed
+
+- Offer to open the review pull requests in the browser
+
 ## 4.12.1 - 2026-11-19
 
 ### Added

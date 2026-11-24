@@ -333,10 +333,10 @@ packages:
     dependency: transitive
     description:
       name: gg_is_flutter
-      sha256: b93b62e0e46ba1ea1165c3813cc306c41f687d8ca99d7b5cb4986832a6d3f6c1
+      sha256: dae6905a70431511cf9755dc492191082368c2b0f7374037680e469a4284953a
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.5"
+    version: "2.3.0"
   gg_is_github:
     dependency: transitive
     description:
@@ -442,7 +442,7 @@ packages:
     source: hosted
     version: "2.7.10"
   gg_process:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: gg_process
       sha256: d617786addbc00fe417a512a3f18ea24eaf29771b2bbb3fd15903351b760d3d5
@@ -898,4 +898,4 @@ packages:
     source: hosted
     version: "2.2.4"
 sdks:
-  dart: ">=3.13.0 <4.0.0"
+  dart: ">=3.14.0 <4.0.0"

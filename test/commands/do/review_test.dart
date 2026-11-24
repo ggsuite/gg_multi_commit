@@ -15,6 +15,7 @@ import 'package:gg_multi_commit/src/commands/can/review.dart';
 import 'package:gg_multi_commit/src/commands/did/review.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
 import 'package:gg_multi_commit/src/commands/do/review.dart';
+import 'package:gg_multi_commit/src/tools/open_in_browser.dart';
 import 'package:gg_one/gg_one.dart' as gg;
 import 'package:gg_publish/gg_publish.dart'
     show PublishedVersion, VersionIncrement;
@@ -39,6 +40,42 @@ class MockEnsurePublishConfigIgnored extends Mock
 class MockPublishedVersion extends Mock implements PublishedVersion {}
 
 class FakeDirectory extends Fake implements Directory {}
+
+/// Answers every select with [answer] and records the questions asked.
+class _FakePrompts extends gg.GgPrompts {
+  _FakePrompts(this.answer);
+
+  final int answer;
+  final asked = <({String prompt, List<String> options})>[];
+
+  /// Called on every select, before it answers.
+  void Function()? onSelect;
+
+  /// Whether select throws instead of answering.
+  bool fails = false;
+
+  @override
+  Future<int> select({
+    required String prompt,
+    required List<String> options,
+    int initialIndex = 0,
+  }) async {
+    asked.add((prompt: prompt, options: options));
+    onSelect?.call();
+    if (fails) {
+      throw Exception('no terminal');
+    }
+    return answer;
+  }
+
+  @override
+  Future<String> input({
+    required String prompt,
+    String? defaultValue,
+    String? initialText,
+    bool asMessageEditor = false,
+  }) => throw UnimplementedError();
+}
 
 class FakeNode extends Fake implements Node {}
 
@@ -128,6 +165,8 @@ void main() {
     bool ensureIgnoredThrows = false,
     AddReposBetween? addReposBetween,
     int increment = 0,
+    bool canOfferToOpen = false,
+    OpenInBrowser? openInBrowser,
   }) {
     final canReview = MockCanReviewCommand();
     when(
@@ -269,6 +308,8 @@ void main() {
       ),
       ensureIgnored: ensureIgnored,
       addReposBetween: addReposBetween,
+      hasTerminal: () => canOfferToOpen,
+      openInBrowser: openInBrowser,
     );
 
     return (
@@ -853,6 +894,181 @@ void main() {
       );
       // The review itself succeeded — the branch is on the remote — so the
       // review is still recorded.
+      verify(
+        () => bed.ticketState.writeSuccess(
+          ticketDir: any(named: 'ticketDir'),
+          subs: any(named: 'subs'),
+          key: DidReviewCommand.stateKey,
+        ),
+      ).called(1);
+    });
+  });
+
+  group('DoReviewCommand open pull requests in the browser', () {
+    late List<List<String>> started;
+    late OpenInBrowser openInBrowser;
+
+    setUp(() {
+      started = [];
+      openInBrowser = OpenInBrowser(
+        operatingSystem: 'linux',
+        startDetached: (executable, arguments) async =>
+            started.add([executable, ...arguments]),
+      );
+    });
+
+    tearDown(() => gg.GgPrompts.current = null);
+
+    ReviewTestBed bedWithTwoRepos({bool canOfferToOpen = true}) {
+      Directory(path.join(ticketDir.path, 'B')).createSync(recursive: true);
+      final createPullRequest = MockCreatePullRequest();
+      when(
+        () => createPullRequest.get(
+          directory: any(named: 'directory'),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          body: any(named: 'body'),
+        ),
+      ).thenAnswer((invocation) async {
+        final dir = invocation.namedArguments[#directory] as Directory;
+        return 'https://github.com/ggsuite/${path.basename(dir.path)}/pull/1';
+      });
+      return makeCommand(
+        repos: ['A', 'B'],
+        createPullRequest: createPullRequest,
+        canOfferToOpen: canOfferToOpen,
+        openInBrowser: openInBrowser,
+      );
+    }
+
+    test('opens every pull request in a tab of its own on request', () async {
+      final prompts = _FakePrompts(0);
+      gg.GgPrompts.current = prompts;
+      final bed = bedWithTwoRepos();
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(prompts.asked.single.options, ['Open 2 PRs in Browser', 'Skip']);
+      expect(started, [
+        ['xdg-open', 'https://github.com/ggsuite/A/pull/1/changes'],
+        ['xdg-open', 'https://github.com/ggsuite/B/pull/1/changes'],
+      ]);
+    });
+
+    test('opens nothing when the user skips', () async {
+      final prompts = _FakePrompts(1);
+      gg.GgPrompts.current = prompts;
+      final bed = makeCommand(
+        canOfferToOpen: true,
+        openInBrowser: openInBrowser,
+      );
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      // A single pull request is named in the singular.
+      expect(prompts.asked.single.options.first, 'Open 1 PR in Browser');
+      expect(started, isEmpty);
+    });
+
+    for (final (name, terminal, review)
+        in <(String, bool, Future<void> Function(DoReviewCommand))>[
+          (
+            'without a terminal',
+            false,
+            (command) =>
+                runner(command).run(['review', '--input', ticketDir.path]),
+          ),
+          (
+            'with --no-interactive',
+            true,
+            (command) => runner(command)
+                .run(['review', '--input', ticketDir.path, '--no-interactive']),
+          ),
+          (
+            'when another command runs the review',
+            true,
+            (command) => command.get(directory: ticketDir, ggLog: ggLog),
+          ),
+        ]) {
+      test('asks nothing $name', () async {
+        final prompts = _FakePrompts(0);
+        gg.GgPrompts.current = prompts;
+
+        await review(bedWithTwoRepos(canOfferToOpen: terminal).command);
+
+        expect(prompts.asked, isEmpty);
+        expect(started, isEmpty);
+      });
+    }
+
+    test('asks after the review is recorded and the failures are '
+        'reported', () async {
+      final prompts = _FakePrompts(1);
+      gg.GgPrompts.current = prompts;
+      final bed = bedWithTwoRepos();
+      when(
+        () => bed.createPullRequest.get(
+          directory: any(
+            named: 'directory',
+            that: predicate<Directory>((d) => path.basename(d.path) == 'B'),
+          ),
+          ggLog: any(named: 'ggLog'),
+          message: any(named: 'message'),
+          body: any(named: 'body'),
+        ),
+      ).thenThrow(Exception('gh failed'));
+      var reportedBeforeAsking = false;
+      var recordedBeforeAsking = false;
+      prompts.onSelect = () {
+        reportedBeforeAsking = messages.any(
+          (m) => m.contains('No pull request for B'),
+        );
+        recordedBeforeAsking =
+            verify(
+              () => bed.ticketState.writeSuccess(
+                ticketDir: any(named: 'ticketDir'),
+                subs: any(named: 'subs'),
+                key: DidReviewCommand.stateKey,
+              ),
+            ).callCount ==
+            1;
+      };
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(prompts.asked.single.options.first, 'Open 1 PR in Browser');
+      expect(reportedBeforeAsking, isTrue);
+      expect(recordedBeforeAsking, isTrue);
+    });
+
+    test('warns without failing when the prompt breaks', () async {
+      gg.GgPrompts.current = _FakePrompts(0)..fails = true;
+      final bed = bedWithTwoRepos();
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(
+        messages.any((m) => m.contains('Could not open the pull requests')),
+        isTrue,
+      );
+      expect(started, isEmpty);
+    });
+
+    test('warns without failing when the browser cannot start', () async {
+      gg.GgPrompts.current = _FakePrompts(0);
+      openInBrowser = OpenInBrowser(
+        operatingSystem: 'linux',
+        startDetached: (_, _) async =>
+            throw const ProcessException('xdg-open', [], 'not found'),
+      );
+      final bed = bedWithTwoRepos();
+
+      await runner(bed.command).run(['review', '--input', ticketDir.path]);
+
+      expect(
+        messages.any((m) => m.contains('Could not open the pull requests')),
+        isTrue,
+      );
       verify(
         () => bed.ticketState.writeSuccess(
           ticketDir: any(named: 'ticketDir'),

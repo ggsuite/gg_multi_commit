@@ -18,6 +18,7 @@ import 'package:gg_multi_core/gg_multi_core.dart';
 import 'package:gg_multi_commit/src/commands/can/review.dart';
 import 'package:gg_multi_commit/src/commands/did/review.dart';
 import 'package:gg_multi_commit/src/commands/do/push.dart';
+import 'package:gg_multi_commit/src/tools/open_in_browser.dart';
 
 /// Command to review all repos in the ticket.
 ///
@@ -34,6 +35,9 @@ import 'package:gg_multi_commit/src/commands/do/push.dart';
 /// 5. The ticket hash is stored as `didReview` in `<ticket>/.gg.json`, so
 ///    `gg did review` can answer whether the current state was reviewed and
 ///    `gg do publish` refuses a state that was not.
+/// 6. Run from the command line on a terminal, the review offers to open the
+///    pull requests in the browser, one tab each — last, so that nothing the
+///    review has to record waits for the answer.
 ///
 /// **The recorded hash also skips the run.** A state that was reviewed
 /// already is reviewed again by nobody: the second `gg do review` reads the
@@ -87,7 +91,11 @@ class DoReviewCommand extends DirCommand<void> {
     gg.EnsurePublishConfigIgnored? ensureIgnored,
     AddReposBetween? addReposBetween,
     TicketLocalizer? ticketLocalizer,
+    OpenInBrowser? openInBrowser,
+    gg.HasTerminal? hasTerminal,
   }) : _addBetween = addReposBetween,
+       _openInBrowser = openInBrowser ?? OpenInBrowser(),
+       _hasTerminal = hasTerminal ?? gg.stdioHasTerminal,
        _ticketLocalizer = ticketLocalizer ?? TicketLocalizer(ggLog: ggLog),
        _canReviewCommand = canReviewCommand ?? CanReviewCommand(ggLog: ggLog),
        _sortedProcessingList =
@@ -133,6 +141,12 @@ class DoReviewCommand extends DirCommand<void> {
   /// [_addBetween].
   final TicketLocalizer _ticketLocalizer;
 
+  /// Opens the pull requests in the browser when the user asks for it.
+  final OpenInBrowser _openInBrowser;
+
+  /// Whether a user can answer the question to open the pull requests.
+  final gg.HasTerminal _hasTerminal;
+
   @override
   Future<void> exec({
     required Directory directory,
@@ -149,6 +163,7 @@ class DoReviewCommand extends DirCommand<void> {
     force: force,
     reaskVersion: reaskVersion,
     interactive: interactive,
+    offerToOpen: true,
   );
 
   @override
@@ -159,6 +174,7 @@ class DoReviewCommand extends DirCommand<void> {
     bool? force,
     bool? reaskVersion,
     bool? interactive,
+    bool offerToOpen = false,
   }) async {
     ggLog(cH1('\nPrepare review'));
 
@@ -291,7 +307,7 @@ class DoReviewCommand extends DirCommand<void> {
     // Step 8: Open a pull request per released repo and print its url --------
     // Everything is on the remote now, so the work can be reviewed right
     // away instead of only when it is published.
-    await _createPullRequests(
+    final urls = await _createPullRequests(
       ticketDir: ticketDir,
       ticketName: ticketName,
       plan: plan,
@@ -307,6 +323,14 @@ class DoReviewCommand extends DirCommand<void> {
       subs: subs,
       key: DidReviewCommand.stateKey,
     );
+
+    // Step 10: Offer to open the pull requests -------------------------------
+    // Only a review run from the command line on a terminal asks: a command
+    // that runs the review as one of its steps keeps its own flow free of
+    // the question, and without a terminal nobody could answer.
+    if (offerToOpen && asks && urls.isNotEmpty && _hasTerminal()) {
+      await _offerToOpen(urls, ggLog);
+    }
   }
 
   /// Adds the repos between the breaking releases of [plan] and the ticket
@@ -478,10 +502,13 @@ class DoReviewCommand extends DirCommand<void> {
   /// ticket is under review, not ready to land. `gg do publish` reuses them
   /// and sets auto-merge when the release is complete.
   ///
+  /// Returns the printed urls. The pull requests are **not** opened in the
+  /// browser on their own — see [_offerToOpen].
+  ///
   /// A repo whose pull request cannot be opened does **not** fail the review:
   /// the push has succeeded already, and the branch is on the remote either
   /// way. The reason is reported and the remaining repos are still processed.
-  Future<void> _createPullRequests({
+  Future<List<String>> _createPullRequests({
     required Directory ticketDir,
     required String ticketName,
     required PublishPlan plan,
@@ -501,7 +528,7 @@ class DoReviewCommand extends DirCommand<void> {
           'already published.',
         ),
       );
-      return;
+      return const [];
     }
 
     final urls = <String, String>{};
@@ -570,6 +597,31 @@ class DoReviewCommand extends DirCommand<void> {
           '"gg do review" again. Reason: ${entry.value}',
         ),
       );
+    }
+
+    return urls.values.toList();
+  }
+
+  /// Asks whether the [urls] are opened in the browser and opens each of them
+  /// in a tab of its own when the user says so.
+  ///
+  /// Neither a prompt that breaks nor a browser that cannot be started fails
+  /// the review: it is recorded already, and the urls are printed.
+  Future<void> _offerToOpen(List<String> urls, GgLog ggLog) async {
+    final count = urls.length;
+    try {
+      final choice = await gg.GgPrompts.current.select(
+        prompt: 'Open the pull requests?',
+        options: [
+          'Open $count ${count == 1 ? 'PR' : 'PRs'} in Browser',
+          'Skip',
+        ],
+      );
+      if (choice == 0) {
+        await _openInBrowser.open(urls);
+      }
+    } catch (e) {
+      ggLog(cWarn('⚠️ Could not open the pull requests: ${_reason(e)}'));
     }
   }
 

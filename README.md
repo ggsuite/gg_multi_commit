@@ -57,6 +57,12 @@ ignores the flag and reviews anyway; `do review --reask-version` asks the
 version increment and merge message again, with the recorded answer
 pre-selected.
 
+The pull requests are not opened in the browser on their own. Once the
+review is recorded, `gg do review` run on a terminal asks `Open <n> PRs in
+Browser` — the choice opens each pull request in a tab of its own. Without
+a terminal, with `--no-interactive`, or when another command runs the
+review, nothing is asked.
+
 **Several repos at once.** `can commit`, `can push`, `did commit`,
 `did push`, `do push` and `do review` handle several repos at the same time
 and report them in repo order. Test runs: a quarter of the processors, at
