@@ -10,5 +10,5 @@
   "layers": ["gg_args", "gg_changelog", "gg_git", "gg_local_package_dependencies", "gg_log", "gg_multi_core", "gg_one", "gg_publish", "gg_status_printer", "dna_ggsuite"]
 
   // "vars": { "dnaProjectName": "my-project" },
-  // "claude": { "claudeMdInclude": ["doc/conventions"] }
+  // "claude": { "claudeMdInclude": ["doc/en/conventions"] }
 }
