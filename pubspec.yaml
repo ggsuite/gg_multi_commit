@@ -4,7 +4,7 @@ version: 4.13.0
 repository: https://github.com/ggsuite/gg_multi_commit.git
 
 environment:
-  sdk: ">=3.13.0 <4.0.0"
+  sdk: ">=3.14.0 <4.0.0"
 
 dependencies:
   gg_args: ^3.2.1
@@ -26,7 +26,7 @@ dependencies:
 
 dev_dependencies:
   args: ^2.7.0
-  dna_ggsuite: ^1.0.2
+  dna_ggsuite: ^3.0.0
   gg_capture_print: ^1.2.1
   helix: ^1.14.0
   lints: ^6.1.0
